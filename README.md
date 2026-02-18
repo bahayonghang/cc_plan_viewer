@@ -33,6 +33,41 @@ A browser-based viewer for Claude Code plans — view, annotate, and comment on 
 
 ## Quick Start
 
+### Using `just` (Recommended, Cross-platform)
+
+[Install `just`](https://github.com/casey/just#installation) first, then:
+
+```powershell
+# Clone to your machine
+git clone git@github.com:mekalz/plan_viewer.git $HOME\plan-viewer
+cd plan-viewer
+
+# Run setup
+just setup
+
+# Or quick start (start server + open browser)
+just go
+
+# See all commands
+just --list
+```
+
+### Windows (Native)
+
+```powershell
+# Clone to your machine
+git clone git@github.com:mekalz/plan_viewer.git $HOME\plan-viewer
+cd plan-viewer
+
+# Run setup (creates dirs, installs hooks, adds CLAUDE.md reference, starts server)
+.\setup.bat
+
+# Open in browser
+start http://localhost:3456
+```
+
+### macOS / Linux
+
 ```bash
 # Clone to your machine
 git clone git@github.com:mekalz/plan_viewer.git ~/plan-viewer
@@ -54,15 +89,21 @@ The setup script handles everything automatically:
 - Creates a sample plan for testing
 - Starts the server on port 3456
 
-To uninstall the hooks:
+### Uninstall
 
+**Windows:**
+```powershell
+.\uninstall.bat
+```
+
+**macOS / Linux:**
 ```bash
 bash setup.sh --uninstall
 ```
 
 ## Manual Setup (Optional)
 
-If you prefer not to run `setup.sh`, or need to configure things individually:
+If you prefer not to run `setup.sh` (or `setup.bat` on Windows), or need to configure things individually:
 
 ### 1. Directory Structure
 
@@ -73,10 +114,41 @@ The tool uses these directories:
 | `~/.claude/plans/` | Claude Code's plan files (auto-created) |
 | `~/.claude/plan-reviews/` | Comment metadata storage (JSON) |
 
+On Windows, `~` refers to `%USERPROFILE%` (e.g., `C:\Users\YourName`).
+
 ### 2. Claude Code Hooks
 
 For real-time notifications when Claude finishes a task, add hooks to `~/.claude/settings.json`:
 
+**Windows:**
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash C:/path/to/plan-viewer/notify.bat stop"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash C:/path/to/plan-viewer/notify.bat tool"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**macOS / Linux:**
 ```json
 {
   "hooks": {
@@ -108,6 +180,13 @@ For real-time notifications when Claude finishes a task, add hooks to `~/.claude
 
 So Claude Code understands how to respond to your review comments, copy `plan_viewer.md` and add a reference in your global CLAUDE.md:
 
+**Windows:**
+```powershell
+copy plan_viewer.md %USERPROFILE%\.claude\plan_viewer.md
+echo Read ~/.claude/plan_viewer.md for Plan Viewer integration instructions. >> %USERPROFILE%\.claude\CLAUDE.md
+```
+
+**macOS / Linux:**
 ```bash
 cp ~/plan-viewer/plan_viewer.md ~/.claude/plan_viewer.md
 echo "Read ~/.claude/plan_viewer.md for Plan Viewer integration instructions." >> ~/.claude/CLAUDE.md
@@ -121,6 +200,25 @@ This teaches Claude to:
 
 ### Typical Session
 
+**Windows:**
+```powershell
+# Terminal 1: Start the viewer
+cd plan-viewer
+.\start-server.bat
+
+# Terminal 2: Start Claude Code in plan mode
+cd my-project
+claude
+# Press Shift+Tab to switch to plan mode
+# Ask: "Create an architecture plan for the auth system"
+
+# Browser: http://localhost:3456
+# Review the plan, add comments
+# Back in Terminal 2:
+# Tell Claude: "Read the review comments in the plan file and revise"
+```
+
+**macOS / Linux:**
 ```bash
 # Terminal 1: Start the viewer
 cd ~/plan-viewer && python3 server.py
@@ -198,7 +296,11 @@ plan-viewer/
 │                      #   - Text-selection + section-level comments
 │
 ├── setup.sh           # One-click setup & uninstall
+├── setup.bat          # One-click setup (Windows)
+├── uninstall.bat      # Uninstall hooks (Windows)
 ├── notify.sh          # Claude Code hook script
+├── notify.bat         # Claude Code hook script (Windows)
+├── start-server.bat   # Quick server start (Windows)
 ├── icon.svg           # Project logo
 ├── plan_viewer.md     # Review instructions for Claude Code
 ├── CONTRIBUTING.md    # Contribution guidelines
@@ -224,11 +326,36 @@ plan-viewer/
 
 ### Change Port
 
+**Using `just`:**
+```powershell
+just start -- --port 8080
+```
+
+**Windows:**
+```powershell
+$env:PLAN_REVIEWER_PORT=8080; .\setup.bat
+# or
+python server.py --port 8080
+```
+
+**macOS / Linux:**
 ```bash
 PLAN_REVIEWER_PORT=8080 python3 server.py
 # or
 python3 server.py --port 8080
 ```
+
+### Available `just` Commands
+
+| Command | Description |
+|---------|-------------|
+| `just` | Show help |
+| `just start` | Start the server |
+| `just setup` | Run setup (install hooks, create dirs, start server) |
+| `just uninstall` | Uninstall hooks |
+| `just open` | Open browser |
+| `just go` | Quick start (start server + open browser) |
+| `just check` | Check Python version |
 
 ### Watch Additional Directories
 
