@@ -20,3 +20,18 @@ Thumbs.db
 # Environment
 .env
 *.log
+
+# Tauri
+src-tauri/target/
+src-tauri/dist/
+src-tauri/icons/*.gen.*
+
+# Node.js
+node_modules/
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Vite
+dist/

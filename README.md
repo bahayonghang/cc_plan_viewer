@@ -1,6 +1,6 @@
 # Plan Viewer
 
-A browser-based viewer for Claude Code plans — view, annotate, and comment on plans directly from your browser.
+A Tauri desktop application for Claude Code plans — view, annotate, and comment on plans with native file access and live Mermaid diagram rendering.
 
 | | |
 |---|---|
@@ -11,13 +11,13 @@ A browser-based viewer for Claude Code plans — view, annotate, and comment on 
 ```
 ┌──────────────────┐     ┌──────────────────┐     ┌──────────────────┐
 │                  │     │                  │     │                  │
-│   Claude Code    │────▶│   Plan Viewer    │◀────│    Browser UI    │
-│   (Terminal)     │     │  (Python Server) │     │  (localhost)     │
+│   Claude Code    │────▶│   Plan Viewer    │◀────│   Desktop App    │
+│   (Terminal)     │     │   (Tauri/Rust)   │     │   (WebView2)     │
 │                  │     │                  │     │                  │
-│  Creates/updates │     │  Watches files   │     │  View plans      │
-│  plan .md files  │     │  Serves UI       │     │  Add comments    │
-│  Reads comments  │     │  Manages reviews │     │  Mermaid render  │
-│  Revises plans   │     │  SSE live reload │     │                  │
+│  Creates/updates │     │  Direct file     │     │  View plans      │
+│  plan .md files  │     │  access via Rust │     │  Add comments    │
+│  Reads comments  │     │  File watcher    │     │  Mermaid render  │
+│  Revises plans   │     │  Native events   │     │                  │
 │                  │     │                  │     │                  │
 └──────────────────┘     └──────────────────┘     └──────────────────┘
 ```
@@ -25,7 +25,7 @@ A browser-based viewer for Claude Code plans — view, annotate, and comment on 
 ### The Review Loop
 
 1. **Claude Code** creates a plan in `~/.claude/plans/` (use plan mode: `Shift+Tab`)
-2. **Plan Viewer** auto-detects the file and renders it in the browser with Mermaid diagrams
+2. **Plan Viewer** auto-detects the file and renders it with Mermaid diagrams
 3. **You** review the plan — click section `+` buttons for section-level comments, or select text for inline comments
 4. Comments are **written back into the plan `.md` file** under a `## 📝 Review Comments` section
 5. **Claude Code** reads the updated plan (it re-reads plan files), sees your comments, and revises accordingly
@@ -33,7 +33,16 @@ A browser-based viewer for Claude Code plans — view, annotate, and comment on 
 
 ## Quick Start
 
-### Using `just` (Recommended, Cross-platform)
+### Prerequisites
+
+- **Node.js** (LTS) — [Download](https://nodejs.org/)
+- **pnpm** — `npm install -g pnpm`
+- **Rust** — [Install via rustup](https://rustup.rs/)
+- **Platform-specific:**
+  - **Windows:** [Visual Studio C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) (Desktop development with C++ workload)
+  - **Linux:** `sudo apt install libwebkit2gtk-4.1-dev build-essential libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev`
+
+### Using `just` (Recommended)
 
 [Install `just`](https://github.com/casey/just#installation) first, then:
 
@@ -42,169 +51,62 @@ A browser-based viewer for Claude Code plans — view, annotate, and comment on 
 git clone git@github.com:mekalz/plan_viewer.git $HOME\plan-viewer
 cd plan-viewer
 
-# Run setup
-just setup
+# Install dependencies
+just install-deps
 
-# Or quick start (start server + open browser)
-just go
+# Start development
+just tauri-dev
 
 # See all commands
 just --list
 ```
 
-### Windows (Native)
+### Manual
 
 ```powershell
 # Clone to your machine
 git clone git@github.com:mekalz/plan_viewer.git $HOME\plan-viewer
 cd plan-viewer
 
-# Run setup (creates dirs, installs hooks, adds CLAUDE.md reference, starts server)
-.\setup.bat
+# Install Node.js dependencies
+pnpm install
 
-# Open in browser
-start http://localhost:3456
+# Start development
+pnpm tauri dev
 ```
 
-### macOS / Linux
+## Building
+
+### Development Build
 
 ```bash
-# Clone to your machine
-git clone git@github.com:mekalz/plan_viewer.git ~/plan-viewer
-cd ~/plan-viewer
+# Using just
+just tauri-build-debug
 
-# Run setup (creates dirs, installs hooks, adds CLAUDE.md reference, starts server)
-bash setup.sh
-
-# Open in browser
-open http://localhost:3456
+# Or manually
+pnpm tauri build --debug
 ```
 
-**That's it.** No pip install, no build step. Pure Python 3 standard library, zero dependencies.
+### Production Build
 
-The setup script handles everything automatically:
-- Creates `~/.claude/plans/` and `~/.claude/plan-reviews/` directories
-- Installs Claude Code hooks into `~/.claude/settings.json` (Stop + PostToolUse)
-- Copies `plan_viewer.md` to `~/.claude/` and adds a reference in `~/.claude/CLAUDE.md`
-- Creates a sample plan for testing
-- Starts the server on port 3456
-
-### Uninstall
-
-**Windows:**
-```powershell
-.\uninstall.bat
-```
-
-**macOS / Linux:**
 ```bash
-bash setup.sh --uninstall
+# Using just
+just tauri-build
+
+# Or manually
+pnpm tauri build
 ```
 
-## Manual Setup (Optional)
-
-If you prefer not to run `setup.sh` (or `setup.bat` on Windows), or need to configure things individually:
-
-### 1. Directory Structure
-
-The tool uses these directories:
-
-| Path | Purpose |
-|------|---------|
-| `~/.claude/plans/` | Claude Code's plan files (auto-created) |
-| `~/.claude/plan-reviews/` | Comment metadata storage (JSON) |
-
-On Windows, `~` refers to `%USERPROFILE%` (e.g., `C:\Users\YourName`).
-
-### 2. Claude Code Hooks
-
-For real-time notifications when Claude finishes a task, add hooks to `~/.claude/settings.json`:
-
-**Windows:**
-```json
-{
-  "hooks": {
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash C:/path/to/plan-viewer/notify.bat stop"
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash C:/path/to/plan-viewer/notify.bat tool"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-**macOS / Linux:**
-```json
-{
-  "hooks": {
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/plan-viewer/notify.sh stop"
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/plan-viewer/notify.sh tool"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-### 3. CLAUDE.md Integration
-
-So Claude Code understands how to respond to your review comments, copy `plan_viewer.md` and add a reference in your global CLAUDE.md:
-
-**Windows:**
-```powershell
-copy plan_viewer.md %USERPROFILE%\.claude\plan_viewer.md
-echo Read ~/.claude/plan_viewer.md for Plan Viewer integration instructions. >> %USERPROFILE%\.claude\CLAUDE.md
-```
-
-**macOS / Linux:**
-```bash
-cp ~/plan-viewer/plan_viewer.md ~/.claude/plan_viewer.md
-echo "Read ~/.claude/plan_viewer.md for Plan Viewer integration instructions." >> ~/.claude/CLAUDE.md
-```
-
-This teaches Claude to:
-- Recognize the `## 📝 Review Comments` section
-- Respond appropriately to reviewer comments
+Build output will be in `src-tauri/target/release/bundle/`
 
 ## Usage Workflow
 
 ### Typical Session
 
-**Windows:**
 ```powershell
-# Terminal 1: Start the viewer
+# Terminal 1: Start Plan Viewer (Tauri desktop app)
 cd plan-viewer
-.\start-server.bat
+pnpm tauri dev
 
 # Terminal 2: Start Claude Code in plan mode
 cd my-project
@@ -212,25 +114,7 @@ claude
 # Press Shift+Tab to switch to plan mode
 # Ask: "Create an architecture plan for the auth system"
 
-# Browser: http://localhost:3456
-# Review the plan, add comments
-# Back in Terminal 2:
-# Tell Claude: "Read the review comments in the plan file and revise"
-```
-
-**macOS / Linux:**
-```bash
-# Terminal 1: Start the viewer
-cd ~/plan-viewer && python3 server.py
-
-# Terminal 2: Start Claude Code in plan mode
-cd ~/my-project
-claude
-# Press Shift+Tab to switch to plan mode
-# Ask: "Create an architecture plan for the auth system"
-
-# Browser: http://localhost:3456
-# Review the plan, add comments
+# Review the plan in the desktop app, add comments
 # Back in Terminal 2:
 # Tell Claude: "Read the review comments in the plan file and revise"
 ```
@@ -266,83 +150,82 @@ Claude Code reads these directly since they're part of the plan file.
 
 ## Features
 
-- **Zero dependencies** — Pure Python 3 server, single HTML file
-- **Live reload** — SSE-based, browser auto-updates when files change
-- **Mermaid rendering** — Flowcharts, sequence diagrams, Gantt charts, etc.
+- **Native desktop app** — Tauri 2.0 with Rust backend
+- **Direct file access** — No HTTP server needed, native file system access
+- **File watcher** — Real-time updates when plan files change (using `notify` crate)
+- **Live Mermaid rendering** — Flowcharts, sequence diagrams, Gantt charts, etc.
 - **Section-level comments** — Click the `+` button on any heading
 - **Text-selection comments** — Select any text to add an inline comment with context
-- **Comment highlighting** — Selected text with comments is highlighted in the content pane
+- **Comment highlighting** — Selected text with comments is highlighted
 - **Dark / Light themes** — Toggle with smooth transitions, persisted in localStorage
 - **Syntax highlighting** — Code blocks highlighted via highlight.js (theme-aware)
 - **Comment sidebar** — Comments displayed with linked context previews
 - **Bidirectional comment sync** — JSON metadata and markdown blocks kept in sync
-- **Hook integration** — Optional Claude Code hooks for real-time notifications
-- **Auto-reconnect** — SSE connection auto-recovers on disconnect
+- **Auto-reconnect** — File watcher auto-recovers on disconnect
 
 ## Architecture
 
 ```
 plan-viewer/
-├── server.py          # Python HTTP server (zero deps)
-│                      #   - File watcher (polling ~1s interval)
-│                      #   - SSE for live updates
-│                      #   - REST API for plans & comments
-│                      #   - Bidirectional comment sync (JSON ↔ markdown)
+├── src/                   # Frontend (Vite + Vanilla JS)
+│   ├── index.html         # Main HTML
+│   ├── main.js            # Entry point
+│   ├── app.js             # Application logic
+│   └── styles/
+│       └── main.css       # Styles
 │
-├── index.html         # Single-file frontend
-│                      #   - marked.js for Markdown
-│                      #   - beautiful-mermaid for diagrams
-│                      #   - highlight.js for code
-│                      #   - Text-selection + section-level comments
+├── src-tauri/             # Tauri (Rust) backend
+│   ├── src/
+│   │   └── main.rs        # Rust backend with file watcher
+│   ├── icons/             # App icons
+│   ├── Cargo.toml         # Rust dependencies
+│   └── tauri.conf.json    # Tauri config
 │
-├── setup.sh           # One-click setup & uninstall
-├── setup.bat          # One-click setup (Windows)
-├── uninstall.bat      # Uninstall hooks (Windows)
-├── notify.sh          # Claude Code hook script
-├── notify.bat         # Claude Code hook script (Windows)
-├── start-server.bat   # Quick server start (Windows)
-├── icon.svg           # Project logo
-├── plan_viewer.md     # Review instructions for Claude Code
-├── CONTRIBUTING.md    # Contribution guidelines
-├── LICENSE            # MIT License
+├── index.html             # Single-file frontend (dev)
+├── package.json           # Node.js dependencies
+├── vite.config.js         # Vite config
+├── justfile               # Just commands
+├── icon.svg               # Project logo
+├── plan_viewer.md         # Review instructions for Claude Code
+├── CONTRIBUTING.md        # Contribution guidelines
+├── LICENSE                # MIT License
 └── README.md
 ```
 
-### API Endpoints
+### Tauri Commands
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/` | Serve frontend |
-| `GET` | `/api/plans` | List all plans with metadata |
-| `GET` | `/api/plans/:id` | Get plan content and comments |
-| `POST` | `/api/plans/:id/comments` | Add a comment to a plan |
-| `POST` | `/api/comments/:id/resolve` | Mark a comment as resolved |
-| `POST` | `/api/comments/:id/delete` | Delete a comment |
-| `GET` | `/api/events` | SSE stream for live updates |
-| `GET` | `/api/session` | Latest Claude Code session info |
-| `POST` | `/api/hook-trigger` | Receive hook notifications |
+| Command | Description |
+|---------|-------------|
+| `get_plans` | List all plans with metadata |
+| `get_plan_by_id` | Get plan content and comments |
+| `add_comment_command` | Add a comment to a plan |
+| `delete_comment_command` | Delete a comment |
 
 ## Customization
 
-### Change Port
+### Change Window Size
 
-**Using `just`:**
-```powershell
-just start -- --port 8080
+Edit `src-tauri/tauri.conf.json`:
+
+```json
+{
+  "app": {
+    "windows": [{
+      "width": 1400,
+      "height": 900
+    }]
+  }
+}
 ```
 
-**Windows:**
-```powershell
-$env:PLAN_REVIEWER_PORT=8080; .\setup.bat
-# or
-python server.py --port 8080
-```
+### Change App Name
 
-**macOS / Linux:**
-```bash
-PLAN_REVIEWER_PORT=8080 python3 server.py
-# or
-python3 server.py --port 8080
+Edit `src-tauri/tauri.conf.json`:
+
+```json
+{
+  "productName": "Your App Name"
+}
 ```
 
 ### Available `just` Commands
@@ -350,22 +233,20 @@ python3 server.py --port 8080
 | Command | Description |
 |---------|-------------|
 | `just` | Show help |
-| `just start` | Start the server |
-| `just setup` | Run setup (install hooks, create dirs, start server) |
-| `just uninstall` | Uninstall hooks |
-| `just open` | Open browser |
-| `just go` | Quick start (start server + open browser) |
-| `just check` | Check Python version |
-
-### Watch Additional Directories
-
-The server watches `~/.claude/plans/` and `~/.claude/plan-reviews/` by default. You can modify `server.py` to watch project-specific plan directories.
+| `just install-deps` | Install Node.js dependencies |
+| `just tauri-dev` | Start Tauri development |
+| `just tauri-build` | Build production release |
+| `just tauri-build-debug` | Build debug release |
+| `just vite-dev` | Start Vite dev server (frontend only) |
+| `just vite-build` | Build frontend |
+| `just check-all` | Check Rust and Node.js |
+| `just clean` | Clean build artifacts |
 
 ## Limitations
 
 - Comments are appended to plan files — the file grows over multiple review rounds
-- No authentication (localhost only)
-- Mermaid rendering depends on CDN availability (or bundle locally)
+- No authentication (desktop app only)
+- Mermaid rendering depends on CDN availability
 - Claude Code needs to be told to re-read the plan file for comments
 
 ## License
