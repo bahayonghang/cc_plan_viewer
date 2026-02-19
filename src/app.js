@@ -18,16 +18,17 @@ async function api(path, options = {}) {
   if (window.useTauri) {
     // Tauri mode - use cached invoke reference
     const invoke = window.__tauriInvoke;
-    
+    const source = window.currentSource === 'windows' ? null : window.currentSource;
+
     if (path === '/plans' && options.method !== 'POST') {
-      return await invoke('get_plans');
+      return await invoke('get_plans', { source });
     }
-    
+
     if (path.startsWith('/plans/') && !path.endsWith('/comments') && options.method !== 'POST') {
       const planId = path.split('/')[2];
-      return await invoke('get_plan_by_id', { planId });
+      return await invoke('get_plan_by_id', { planId, source });
     }
-    
+
     if (path.endsWith('/comments') && options.method === 'POST') {
       const planId = path.split('/')[2];
       const body = JSON.parse(options.body);
@@ -38,16 +39,18 @@ async function api(path, options = {}) {
           commentType: body.type || 'comment',
           sectionTitle: body.sectionTitle || '',
           selectedText: body.selectedText || ''
-        }
+        },
+        source
       });
     }
-    
+
     if (path.includes('/comments/') && path.endsWith('/delete') && options.method === 'POST') {
       const commentId = path.split('/')[2];
       const body = JSON.parse(options.body);
       return await invoke('delete_comment_command', {
         planId: body.planId,
-        commentId
+        commentId,
+        source
       });
     }
   }
@@ -119,6 +122,35 @@ function showToast(msg) {
     toast.classList.add('visible');
     setTimeout(() => toast.classList.remove('visible'), 3000);
   }
+}
+
+// Source switcher for WSL integration
+function renderSourceSwitcher() {
+  const el = document.getElementById('sourceSwitcher');
+  if (!el || !window.useTauri || !window.wslInfo?.available) {
+    if (el) el.style.display = 'none';
+    return;
+  }
+  const opts = [
+    { value: 'windows', label: '🪟 Windows' },
+    ...window.wslInfo.distributions.map(d => ({
+      value: `wsl:${d}`, label: `🐧 WSL: ${d}`
+    }))
+  ];
+  el.innerHTML = `<select id="sourceSelect" onchange="switchSource(this.value)">
+    ${opts.map(o => `<option value="${o.value}" ${o.value === window.currentSource ? 'selected' : ''}>${o.label}</option>`).join('')}
+  </select>`;
+  el.style.display = 'block';
+}
+
+async function switchSource(src) {
+  window.currentSource = src;
+  window.currentPlanId = null;
+  window.currentPlan = null;
+  document.getElementById('planView').style.display = 'none';
+  document.getElementById('emptyState').style.display = '';
+  const plans = await loadPlanList();
+  if (plans?.length > 0) loadPlan(plans[0].id);
 }
 
 // Render plan list
@@ -566,6 +598,17 @@ export async function initApp() {
   window.deleteComment = deleteComment;
   window.scrollToSection = scrollToSection;
   window.scrollToHighlight = scrollToHighlight;
+  window.switchSource = switchSource;
+
+  // WSL 检测（仅 Tauri 模式）
+  if (window.useTauri) {
+    try {
+      window.wslInfo = await window.__tauriInvoke('detect_wsl');
+    } catch (e) {
+      console.warn('WSL 检测失败:', e);
+    }
+  }
+  renderSourceSwitcher();
 
   // Load plan list (single IPC call, reuse return value)
   const plans = await loadPlanList();

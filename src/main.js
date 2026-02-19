@@ -17,6 +17,8 @@ window.currentPlanId = null;
 window.currentPlan = null;
 window.commentFormContext = {};
 window.useTauri = useTauri;
+window.currentSource = 'windows';
+window.wslInfo = { available: false, distributions: [] };
 
 // Import application logic
 import { initApp } from './app.js';

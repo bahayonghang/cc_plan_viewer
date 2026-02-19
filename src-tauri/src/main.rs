@@ -5,7 +5,33 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use uuid::Uuid;
+
+// ── Plan Source ──────────────────────────────────────────────
+
+/// 计划文件来源：Windows 本地或 WSL 发行版
+#[derive(Debug, Clone)]
+enum PlanSource {
+    Windows,
+    Wsl(String), // 发行版名称
+}
+
+impl PlanSource {
+    fn from_opt(s: Option<&str>) -> Self {
+        match s {
+            Some(v) if v.starts_with("wsl:") => PlanSource::Wsl(v[4..].to_string()),
+            _ => PlanSource::Windows,
+        }
+    }
+}
+
+/// WSL 检测结果
+#[derive(Debug, Serialize, Deserialize)]
+pub struct WslInfo {
+    pub available: bool,
+    pub distributions: Vec<String>,
+}
 
 // ── Configuration ────────────────────────────────────────────
 
@@ -15,12 +41,107 @@ fn get_claude_dir() -> PathBuf {
         .join(".claude")
 }
 
+/// 按来源解析 .claude 目录路径
+fn get_claude_dir_for(source: &PlanSource) -> Result<PathBuf, String> {
+    match source {
+        PlanSource::Windows => Ok(dirs::home_dir().ok_or("无法获取家目录")?.join(".claude")),
+        PlanSource::Wsl(distro) => get_wsl_claude_dir(distro),
+    }
+}
+
+/// 通过 wsl.exe 获取 WSL 发行版中的 ~/.claude 路径，转为 UNC 路径
+fn get_wsl_claude_dir(distro: &str) -> Result<PathBuf, String> {
+    let output = Command::new("wsl.exe")
+        .args(["-d", distro, "-e", "sh", "-c", "echo $HOME"])
+        .output()
+        .map_err(|e| format!("wsl.exe 执行失败: {}", e))?;
+    let home = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if home.is_empty() {
+        return Err(format!("无法获取 {} 的家目录", distro));
+    }
+    // 转换为 Windows UNC 路径: \\wsl$\<distro>/home/user/.claude
+    let unc = format!(r"\\wsl$\{}{}", distro, home.replace('/', "\\"));
+    Ok(PathBuf::from(unc).join(".claude"))
+}
+
 fn get_plans_dir() -> PathBuf {
     get_claude_dir().join("plans")
 }
 
 fn get_comments_dir() -> PathBuf {
     get_claude_dir().join("plan-reviews")
+}
+
+fn get_plans_dir_for(source: &PlanSource) -> Result<PathBuf, String> {
+    Ok(get_claude_dir_for(source)?.join("plans"))
+}
+
+fn get_comments_dir_for(source: &PlanSource) -> Result<PathBuf, String> {
+    Ok(get_claude_dir_for(source)?.join("plan-reviews"))
+}
+
+// ── WSL Detection ────────────────────────────────────────────
+
+/// wsl.exe --list --quiet 输出 UTF-16 LE 编码，需特殊解码
+fn decode_wsl_output(bytes: &[u8]) -> String {
+    // 检测 UTF-16 LE BOM 或成对的零字节（UTF-16 特征）
+    if bytes.len() >= 2
+        && (bytes[0] == 0xFF && bytes[1] == 0xFE || bytes.len() > 1 && bytes[1] == 0x00)
+    {
+        let utf16: Vec<u16> = bytes
+            .chunks_exact(2)
+            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            .collect();
+        String::from_utf16_lossy(&utf16)
+            .trim_start_matches('\u{feff}')
+            .to_string()
+    } else {
+        String::from_utf8_lossy(bytes).to_string()
+    }
+}
+
+/// 列出所有已安装的 WSL 发行版
+///
+/// 注意：`wsl.exe --list --quiet` 在某些 Windows 版本上会返回非零退出码，
+/// 但仍会将发行版列表输出到 stdout，因此不能依赖 status.success() 过滤。
+fn list_wsl_distributions() -> Vec<String> {
+    // 尝试 PATH 中的 wsl.exe，失败则回退到绝对路径
+    let try_list = |exe: &str| -> Vec<u8> {
+        Command::new(exe)
+            .args(["--list", "--quiet"])
+            .output()
+            .map(|o| {
+                if !o.stdout.is_empty() {
+                    o.stdout
+                } else {
+                    o.stderr
+                }
+            })
+            .unwrap_or_default()
+    };
+
+    let mut bytes = try_list("wsl.exe");
+    if bytes.is_empty() {
+        bytes = try_list(r"C:\Windows\System32\wsl.exe");
+    }
+
+    if bytes.is_empty() {
+        return vec![];
+    }
+
+    decode_wsl_output(&bytes)
+        .lines()
+        .map(|s| {
+            // 清理 null 字节、BOM 标记及所有控制字符（UTF-16 解码产物）
+            s.chars()
+                .filter(|&c| !c.is_control() && c != '\u{feff}')
+                .collect::<String>()
+                .trim()
+                .to_string()
+        })
+        // 过滤空字符串以及不含任何字母数字字符的条目
+        .filter(|s| !s.is_empty() && s.chars().any(|c| c.is_alphanumeric()))
+        .collect()
 }
 
 // ── Data Structures ─────────────────────────────────────────
@@ -85,15 +206,14 @@ fn count_comments(comments_dir: &Path, plan_filename: &str) -> usize {
         .unwrap_or(0)
 }
 
-fn list_plans(comments_dir: &Path) -> Vec<PlanInfo> {
-    let plans_dir = get_plans_dir();
+fn list_plans(plans_dir: &Path, comments_dir: &Path) -> Vec<PlanInfo> {
     let mut plans = Vec::new();
 
     if !plans_dir.exists() {
         return plans;
     }
 
-    if let Ok(entries) = fs::read_dir(&plans_dir) {
+    if let Ok(entries) = fs::read_dir(plans_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.extension().and_then(|s| s.to_str()) == Some("md") {
@@ -131,8 +251,7 @@ fn list_plans(comments_dir: &Path) -> Vec<PlanInfo> {
     plans
 }
 
-fn get_plan(plan_id: &str, comments_dir: &Path) -> Option<Plan> {
-    let plans_dir = get_plans_dir();
+fn get_plan(plan_id: &str, plans_dir: &Path, comments_dir: &Path) -> Option<Plan> {
     let path = plans_dir.join(format!("{}.md", plan_id));
 
     if !path.exists() {
@@ -361,6 +480,7 @@ fn sync_comments_with_plan(plan_id: &str, content: &str, comments_dir: &Path) ->
 fn add_comment(
     plan_id: &str,
     comment_data: CommentData,
+    plans_dir: &Path,
     comments_dir: &Path,
 ) -> Result<Comment, String> {
     let plan_filename = format!("{}.md", plan_id);
@@ -384,13 +504,18 @@ fn add_comment(
     save_comments(comments_dir, &plan_filename, &comments)
         .map_err(|e| format!("Failed to save comments: {}", e))?;
 
-    // Inject comment into plan file
-    inject_comment_into_plan(plan_id, &new_comment)?;
+    // 注入评论到 plan 文件
+    inject_comment_into_plan(plan_id, &new_comment, plans_dir)?;
 
     Ok(new_comment)
 }
 
-fn delete_comment(plan_id: &str, comment_id: &str, comments_dir: &Path) -> Result<bool, String> {
+fn delete_comment(
+    plan_id: &str,
+    comment_id: &str,
+    plans_dir: &Path,
+    comments_dir: &Path,
+) -> Result<bool, String> {
     let plan_filename = format!("{}.md", plan_id);
     let comments = load_comments(comments_dir, &plan_filename);
 
@@ -407,15 +532,18 @@ fn delete_comment(plan_id: &str, comment_id: &str, comments_dir: &Path) -> Resul
         save_comments(comments_dir, &plan_filename, &comments)
             .map_err(|e| format!("Failed to save comments: {}", e))?;
 
-        // Remove from plan file
-        remove_comment_from_plan(plan_id, &target)?;
+        // 从 plan 文件中移除评论
+        remove_comment_from_plan(plan_id, &target, plans_dir)?;
     }
 
     Ok(true)
 }
 
-fn inject_comment_into_plan(plan_id: &str, comment: &Comment) -> Result<(), String> {
-    let plans_dir = get_plans_dir();
+fn inject_comment_into_plan(
+    plan_id: &str,
+    comment: &Comment,
+    plans_dir: &Path,
+) -> Result<(), String> {
     let path = plans_dir.join(format!("{}.md", plan_id));
 
     if !path.exists() {
@@ -467,8 +595,11 @@ fn append_comment_to_bottom(content: &mut String, block: &str) {
     }
 }
 
-fn remove_comment_from_plan(plan_id: &str, comment: &Comment) -> Result<(), String> {
-    let plans_dir = get_plans_dir();
+fn remove_comment_from_plan(
+    plan_id: &str,
+    comment: &Comment,
+    plans_dir: &Path,
+) -> Result<(), String> {
     let path = plans_dir.join(format!("{}.md", plan_id));
 
     if !path.exists() {
@@ -503,27 +634,63 @@ fn remove_comment_from_plan(plan_id: &str, comment: &Comment) -> Result<(), Stri
 // ── Tauri Commands ──────────────────────────────────────────
 
 #[tauri::command]
-fn get_plans() -> Vec<PlanInfo> {
-    let comments_dir = get_comments_dir();
-    list_plans(&comments_dir)
+fn detect_wsl() -> WslInfo {
+    if cfg!(target_os = "windows") {
+        let distributions = list_wsl_distributions();
+        WslInfo {
+            available: !distributions.is_empty(),
+            distributions,
+        }
+    } else {
+        WslInfo {
+            available: false,
+            distributions: vec![],
+        }
+    }
 }
 
 #[tauri::command]
-fn get_plan_by_id(plan_id: String) -> Option<Plan> {
-    let comments_dir = get_comments_dir();
-    get_plan(&plan_id, &comments_dir)
+fn get_plans(source: Option<String>) -> Vec<PlanInfo> {
+    let ps = PlanSource::from_opt(source.as_deref());
+    let Ok(plans_dir) = get_plans_dir_for(&ps) else {
+        return vec![];
+    };
+    let Ok(comments_dir) = get_comments_dir_for(&ps) else {
+        return vec![];
+    };
+    list_plans(&plans_dir, &comments_dir)
 }
 
 #[tauri::command]
-fn add_comment_command(plan_id: String, comment_data: CommentData) -> Result<Comment, String> {
-    let comments_dir = get_comments_dir();
-    add_comment(&plan_id, comment_data, &comments_dir)
+fn get_plan_by_id(plan_id: String, source: Option<String>) -> Option<Plan> {
+    let ps = PlanSource::from_opt(source.as_deref());
+    let plans_dir = get_plans_dir_for(&ps).ok()?;
+    let comments_dir = get_comments_dir_for(&ps).ok()?;
+    get_plan(&plan_id, &plans_dir, &comments_dir)
 }
 
 #[tauri::command]
-fn delete_comment_command(plan_id: String, comment_id: String) -> Result<bool, String> {
-    let comments_dir = get_comments_dir();
-    delete_comment(&plan_id, &comment_id, &comments_dir)
+fn add_comment_command(
+    plan_id: String,
+    comment_data: CommentData,
+    source: Option<String>,
+) -> Result<Comment, String> {
+    let ps = PlanSource::from_opt(source.as_deref());
+    let plans_dir = get_plans_dir_for(&ps)?;
+    let comments_dir = get_comments_dir_for(&ps)?;
+    add_comment(&plan_id, comment_data, &plans_dir, &comments_dir)
+}
+
+#[tauri::command]
+fn delete_comment_command(
+    plan_id: String,
+    comment_id: String,
+    source: Option<String>,
+) -> Result<bool, String> {
+    let ps = PlanSource::from_opt(source.as_deref());
+    let plans_dir = get_plans_dir_for(&ps)?;
+    let comments_dir = get_comments_dir_for(&ps)?;
+    delete_comment(&plan_id, &comment_id, &plans_dir, &comments_dir)
 }
 
 // ── Main Entry Point ────────────────────────────────────────
@@ -532,12 +699,13 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .setup(|_app| {
-            // Ensure directories exist (runs after window creation, non-blocking)
+            // 确保 Windows 本地目录存在（启动时创建，非阻塞）
             let _ = fs::create_dir_all(get_plans_dir());
             let _ = fs::create_dir_all(get_comments_dir());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            detect_wsl,
             get_plans,
             get_plan_by_id,
             add_comment_command,

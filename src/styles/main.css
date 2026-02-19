@@ -143,6 +143,28 @@ html[data-theme="light"] .theme-switch-thumb {
   transform: translateX(20px);
 }
 
+/* ===== SOURCE SWITCHER ===== */
+#sourceSwitcher select {
+  width: 100%;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  color: var(--text-primary);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 0.8rem;
+  font-family: var(--font-body);
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+#sourceSwitcher select:hover {
+  border-color: var(--accent-blue);
+}
+#sourceSwitcher select:focus {
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 2px rgba(88,166,255,0.2);
+}
+
 /* ===== MAIN LAYOUT ===== */
 .main-layout {
   display: flex;
