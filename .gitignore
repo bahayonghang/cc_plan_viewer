@@ -1,14 +1,7 @@
-# Python
-__pycache__/
-*.py[cod]
-*.pyo
-*.egg-info/
-dist/
-build/
-
 # OS
 .DS_Store
 Thumbs.db
+nul
 
 # Editor
 *.swp
@@ -35,3 +28,9 @@ yarn-error.log*
 
 # Vite
 dist/
+build/
+
+# AI Tools
+.omc/
+.claude/
+.antigravityignore
