@@ -2,12 +2,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use chrono::{DateTime, Utc};
-use notify::RecommendedWatcher;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
-use tauri::State;
 use uuid::Uuid;
 
 // ── Configuration ────────────────────────────────────────────
@@ -73,11 +70,20 @@ pub struct CommentData {
     pub selected_text: String,
 }
 
-pub struct FileWatcherState {
-    pub watchers: Mutex<Vec<RecommendedWatcher>>,
-}
-
 // ── Plan Operations ─────────────────────────────────────────
+
+/// Lightweight comment count - avoids full deserialization of Comment structs
+fn count_comments(comments_dir: &Path, plan_filename: &str) -> usize {
+    let cf = comments_file_path(comments_dir, plan_filename);
+    if !cf.exists() {
+        return 0;
+    }
+    fs::read_to_string(&cf)
+        .ok()
+        .and_then(|s| serde_json::from_str::<Vec<serde_json::Value>>(&s).ok())
+        .map(|v| v.len())
+        .unwrap_or(0)
+}
 
 fn list_plans(comments_dir: &Path) -> Vec<PlanInfo> {
     let plans_dir = get_plans_dir();
@@ -97,7 +103,7 @@ fn list_plans(comments_dir: &Path) -> Vec<PlanInfo> {
                         .and_then(|s| s.to_str())
                         .unwrap_or("")
                         .to_string();
-                    let comments = load_comments(comments_dir, &format!("{}.md", plan_id));
+                    let comment_count = count_comments(comments_dir, &format!("{}.md", plan_id));
 
                     plans.push(PlanInfo {
                         id: plan_id.clone(),
@@ -112,7 +118,7 @@ fn list_plans(comments_dir: &Path) -> Vec<PlanInfo> {
                         )
                         .to_rfc3339(),
                         size: metadata.len(),
-                        comment_count: comments.len(),
+                        comment_count,
                         source: "plans".to_string(),
                     });
                 }
@@ -316,7 +322,9 @@ fn parse_comments_from_plan(plan_id: &str, content: &str) -> Vec<Comment> {
 
 fn sync_comments_with_plan(plan_id: &str, content: &str, comments_dir: &Path) -> Vec<Comment> {
     let plan_filename = format!("{}.md", plan_id);
-    let mut comments = load_comments(comments_dir, &plan_filename);
+    let original_comments = load_comments(comments_dir, &plan_filename);
+    let original_count = original_comments.len();
+    let mut comments = original_comments;
 
     // Direction 1: Remove JSON comments not in plan file
     let mut synced = Vec::new();
@@ -342,8 +350,8 @@ fn sync_comments_with_plan(plan_id: &str, content: &str, comments_dir: &Path) ->
         }
     }
 
-    // Save if changed
-    if comments.len() != load_comments(comments_dir, &plan_filename).len() {
+    // Save only if changed (compare with original count to avoid redundant I/O)
+    if comments.len() != original_count {
         let _ = save_comments(comments_dir, &plan_filename, &comments);
     }
 
@@ -495,33 +503,25 @@ fn remove_comment_from_plan(plan_id: &str, comment: &Comment) -> Result<(), Stri
 // ── Tauri Commands ──────────────────────────────────────────
 
 #[tauri::command]
-fn get_plans(_state: State<FileWatcherState>) -> Vec<PlanInfo> {
+fn get_plans() -> Vec<PlanInfo> {
     let comments_dir = get_comments_dir();
     list_plans(&comments_dir)
 }
 
 #[tauri::command]
-fn get_plan_by_id(plan_id: String, _state: State<FileWatcherState>) -> Option<Plan> {
+fn get_plan_by_id(plan_id: String) -> Option<Plan> {
     let comments_dir = get_comments_dir();
     get_plan(&plan_id, &comments_dir)
 }
 
 #[tauri::command]
-fn add_comment_command(
-    plan_id: String,
-    comment_data: CommentData,
-    _state: State<FileWatcherState>,
-) -> Result<Comment, String> {
+fn add_comment_command(plan_id: String, comment_data: CommentData) -> Result<Comment, String> {
     let comments_dir = get_comments_dir();
     add_comment(&plan_id, comment_data, &comments_dir)
 }
 
 #[tauri::command]
-fn delete_comment_command(
-    plan_id: String,
-    comment_id: String,
-    _state: State<FileWatcherState>,
-) -> Result<bool, String> {
+fn delete_comment_command(plan_id: String, comment_id: String) -> Result<bool, String> {
     let comments_dir = get_comments_dir();
     delete_comment(&plan_id, &comment_id, &comments_dir)
 }
@@ -529,14 +529,13 @@ fn delete_comment_command(
 // ── Main Entry Point ────────────────────────────────────────
 
 fn main() {
-    // Ensure directories exist
-    let _ = fs::create_dir_all(get_plans_dir());
-    let _ = fs::create_dir_all(get_comments_dir());
-
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .manage(FileWatcherState {
-            watchers: Mutex::new(Vec::new()),
+        .setup(|_app| {
+            // Ensure directories exist (runs after window creation, non-blocking)
+            let _ = fs::create_dir_all(get_plans_dir());
+            let _ = fs::create_dir_all(get_comments_dir());
+            Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             get_plans,
