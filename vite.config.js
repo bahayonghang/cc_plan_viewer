@@ -18,7 +18,7 @@ export default defineConfig({
     // Don't minify for easier debugging during development
     minify: !process.env.TAURI_DEBUG ? 'esbuild' : false,
     // Produce a sourcemap for debugging
-    sourcemap: true,
+    sourcemap: !!process.env.TAURI_DEBUG,
     // Output to src-tauri/dist for Tauri to bundle
     outDir: 'dist',
     rollupOptions: {

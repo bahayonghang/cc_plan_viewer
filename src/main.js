@@ -5,6 +5,7 @@ import './styles/main.css';
 let useTauri = false;
 try {
   const { invoke } = await import('@tauri-apps/api/core');
+  window.__tauriInvoke = invoke;  // Cache invoke reference for performance
   useTauri = true;
   console.log('🔌 Tauri API loaded');
 } catch (e) {

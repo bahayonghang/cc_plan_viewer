@@ -16,8 +16,8 @@ const THEME_CONFIG = {
 // API abstraction layer - supports both Tauri and HTTP
 async function api(path, options = {}) {
   if (window.useTauri) {
-    // Tauri mode - use invoke
-    const { invoke } = await import('@tauri-apps/api/core');
+    // Tauri mode - use cached invoke reference
+    const invoke = window.__tauriInvoke;
     
     if (path === '/plans' && options.method !== 'POST') {
       return await invoke('get_plans');
@@ -128,11 +128,11 @@ async function loadPlanList() {
 
   if (!plans || plans.length === 0) {
     listEl.innerHTML = '<div style="padding:20px;color:var(--text-muted);font-size:0.85rem;">No plans yet. Switch Claude Code to plan mode to see plans here.</div>';
-    return;
+    return plans;
   }
 
   listEl.innerHTML = plans.map(p => `
-    <div class="plan-item ${p.id === window.currentPlanId ? 'active' : ''}" onclick="loadPlan('${p.id}')">
+    <div class="plan-item ${p.id === window.currentPlanId ? 'active' : ''}" data-plan-id="${p.id}" onclick="loadPlan('${p.id}')">
       <div class="plan-item-name" title="${p.name}">${p.name}</div>
       <div class="plan-item-meta">
         <span>${timeAgo(p.modified)}</span>
@@ -140,6 +140,15 @@ async function loadPlanList() {
       </div>
     </div>
   `).join('');
+
+  return plans;
+}
+
+// Update sidebar active state without full reload (O(n) DOM vs O(n) filesystem)
+function updateSidebarActiveState(planId) {
+  document.querySelectorAll('.plan-item').forEach(item => {
+    item.classList.toggle('active', item.dataset.planId === planId);
+  });
 }
 
 // Load and render a single plan
@@ -149,7 +158,7 @@ async function loadPlan(planId) {
   if (!plan) return;
   window.currentPlan = plan;
 
-  // Show plan view
+  // Show plan view, hide empty state
   document.getElementById('emptyState').style.display = 'none';
   const planView = document.getElementById('planView');
   planView.style.display = 'flex';
@@ -164,12 +173,26 @@ async function loadPlan(planId) {
   // Render comments pane
   renderComments(plan.comments);
 
-  // Update sidebar active state
-  loadPlanList();
+  // Update sidebar active state (lightweight DOM update, no IPC)
+  updateSidebarActiveState(planId);
 }
 
 async function refreshCurrentPlan() {
   if (window.currentPlanId) await loadPlan(window.currentPlanId);
+}
+
+// Lazy-load beautiful-mermaid only when mermaid blocks are detected
+function loadMermaidIfNeeded(mdPane) {
+  const mermaidDivs = mdPane.querySelectorAll('.mermaid');
+  if (mermaidDivs.length === 0) return Promise.resolve();
+  if (window.beautifulMermaid) return Promise.resolve();
+  return new Promise((resolve) => {
+    const script = document.createElement('script');
+    script.src = 'https://unpkg.com/beautiful-mermaid/dist/beautiful-mermaid.browser.global.js';
+    script.onload = resolve;
+    script.onerror = resolve; // Don't block on load failure
+    document.head.appendChild(script);
+  });
 }
 
 // Render markdown content
@@ -258,7 +281,8 @@ function renderMarkdown(content, comments) {
       }
     }
 
-    // Render mermaid if beautifulMermaid is available
+    // Lazy-load and render mermaid if needed
+    await loadMermaidIfNeeded(mdPane);
     if (window.beautifulMermaid) {
       const { renderMermaid } = window.beautifulMermaid;
       const colors = THEME_CONFIG[getCurrentTheme()].mermaid;
@@ -543,11 +567,30 @@ export async function initApp() {
   window.scrollToSection = scrollToSection;
   window.scrollToHighlight = scrollToHighlight;
 
-  // Load plan list
-  await loadPlanList();
+  // Load plan list (single IPC call, reuse return value)
+  const plans = await loadPlanList();
 
-  // Auto-load first plan if available
-  const plans = await api('/plans');
+  // Replace loading spinner with normal empty state content
+  const emptyState = document.getElementById('emptyState');
+  const spinner = document.getElementById('loadingSpinner');
+  if (spinner) spinner.remove();
+  if (emptyState) {
+    const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svgEl.setAttribute('viewBox', '0 0 24 24');
+    svgEl.setAttribute('fill', 'none');
+    svgEl.setAttribute('stroke', 'currentColor');
+    svgEl.setAttribute('stroke-width', '1.5');
+    svgEl.style.cssText = 'width: 64px; height: 64px; opacity: 0.3;';
+    svgEl.innerHTML = '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>';
+    const h3 = document.createElement('h3');
+    h3.textContent = 'Select a plan to review';
+    const p = emptyState.querySelector('p');
+    if (p) p.textContent = 'Choose a plan from the sidebar, or wait for Claude Code to generate one.';
+    emptyState.insertBefore(h3, p);
+    emptyState.insertBefore(svgEl, h3);
+  }
+
+  // Auto-load first plan if available (no duplicate IPC call)
   if (plans && plans.length > 0) {
     loadPlan(plans[0].id);
   }
@@ -595,6 +638,16 @@ export async function initApp() {
       }
     }
   });
+
+  // Show window after initialization (eliminates white flash on startup)
+  if (window.useTauri) {
+    try {
+      const { getCurrentWindow } = await import('@tauri-apps/api/window');
+      await getCurrentWindow().show();
+    } catch (e) {
+      console.warn('Failed to show window:', e);
+    }
+  }
 
   console.log('🚀 Plan Viewer initialized');
   console.log(window.useTauri ? '🖥️ Running in Tauri mode' : '🌐 Running in browser mode');

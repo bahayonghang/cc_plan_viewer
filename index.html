@@ -6,11 +6,15 @@
   <title>Plan Viewer</title>
   <link rel="icon" type="image/svg+xml" href="/icon.svg">
   
-  <!-- Markdown & Mermaid rendering -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.7/marked.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked-highlight/2.2.2/index.umd.min.js"></script>
-  <script src="https://unpkg.com/beautiful-mermaid/dist/beautiful-mermaid.browser.global.js"></script>
+  <!-- Preconnect to CDN origins -->
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+  <link rel="preconnect" href="https://unpkg.com" crossorigin>
+
+  <!-- Markdown & syntax highlighting (defer: non-blocking, ordered execution) -->
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.7/marked.min.js"></script>
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/marked-highlight/2.2.2/index.umd.min.js"></script>
+  <!-- beautiful-mermaid: lazy-loaded on demand in app.js when mermaid blocks detected -->
   <link id="hljs-theme" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github-dark.min.css">
 </head>
 <body>
@@ -58,11 +62,8 @@
     <!-- CONTENT -->
     <div class="content-area" id="contentArea">
       <div class="empty-state" id="emptyState">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width: 64px; height: 64px; opacity: 0.3;">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
-        </svg>
-        <h3>Select a plan to review</h3>
-        <p>Choose a plan from the sidebar, or wait for Claude Code to generate one.</p>
+        <div class="loading-spinner" id="loadingSpinner"></div>
+        <p>Loading plans...</p>
       </div>
 
       <!-- Active plan view (hidden initially) -->

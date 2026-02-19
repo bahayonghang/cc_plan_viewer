@@ -564,6 +564,17 @@ html[data-theme="light"] .theme-switch-thumb {
 .empty-state h3 { font-size: 1.2rem; color: var(--text-secondary); }
 .empty-state p { font-size: 0.9rem; max-width: 400px; line-height: 1.6; }
 
+/* Loading spinner */
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border-primary);
+  border-top-color: var(--accent-blue);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
 /* ===== TOAST ===== */
 .toast {
   position: fixed;
