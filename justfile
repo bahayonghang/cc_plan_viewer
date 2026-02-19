@@ -38,13 +38,14 @@ check-all: check-rust check-node
 ensure-node-deps:
     @echo "🔍 Checking Node.js dependencies..."
     pnpm install --prefer-offline
+    pnpm approve-builds
 
 # Ensure Rust toolchain is available (private)
 [private]
 ensure-rust:
     @echo "🔍 Checking Rust toolchain..."
-    @rustc --version 2>nul || (echo "❌ Rust not found. Please install from https://rustup.rs/" && exit 1)
-    @cargo --version 2>nul || (echo "❌ Cargo not found. Please install from https://rustup.rs/" && exit 1)
+    @rustc --version
+    @cargo --version
     @echo "✅ Rust toolchain is available"
 
 # Ensure all dependencies for Tauri build (private)
@@ -107,75 +108,11 @@ docs-preview: ensure-node-deps
 
 # Sync all project versions to match package.json (single source of truth)
 sync-version:
-    #!/usr/bin/env node
-    const fs = require('fs');
-    const path = require('path');
-    const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-    const version = pkg.version;
-    console.log(`🔄 Syncing versions to ${version} (from package.json)...`);
-    let changed = false;
-    // Sync tauri.conf.json
-    const tauriPath = path.join('src-tauri', 'tauri.conf.json');
-    const tauri = JSON.parse(fs.readFileSync(tauriPath, 'utf8'));
-    if (tauri.version !== version) {
-        console.log(`  → tauri.conf.json: ${tauri.version} → ${version}`);
-        tauri.version = version;
-        fs.writeFileSync(tauriPath, JSON.stringify(tauri, null, 2) + '\n');
-        changed = true;
-    } else {
-        console.log(`  ✓ tauri.conf.json: ${tauri.version} (ok)`);
-    }
-    // Sync Cargo.toml
-    const cargoPath = path.join('src-tauri', 'Cargo.toml');
-    let cargo = fs.readFileSync(cargoPath, 'utf8');
-    const m = cargo.match(/^version\s*=\s*"([^"]+)"/m);
-    const cargoVer = m ? m[1] : null;
-    if (cargoVer !== version) {
-        console.log(`  → Cargo.toml: ${cargoVer} → ${version}`);
-        cargo = cargo.replace(/^version\s*=\s*"[^"]+"/m, `version = "${version}"`);
-        fs.writeFileSync(cargoPath, cargo);
-        changed = true;
-    } else {
-        console.log(`  ✓ Cargo.toml: ${cargoVer} (ok)`);
-    }
-    if (changed) {
-        console.log(`✅ Versions synced to ${version}`);
-    } else {
-        console.log(`✅ All versions already at ${version}`);
-    }
+    node scripts/sync-version.cjs
 
 # Check version consistency without modifying files (strict CI mode)
 check-version:
-    #!/usr/bin/env node
-    const fs = require('fs');
-    const path = require('path');
-    const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-    const version = pkg.version;
-    console.log(`🔍 Checking version consistency (expected: ${version})...`);
-    let ok = true;
-    // Check tauri.conf.json
-    const tauri = JSON.parse(fs.readFileSync(path.join('src-tauri', 'tauri.conf.json'), 'utf8'));
-    if (tauri.version !== version) {
-        console.log(`  ❌ tauri.conf.json: ${tauri.version} (expected ${version})`);
-        ok = false;
-    } else {
-        console.log(`  ✅ tauri.conf.json: ${tauri.version}`);
-    }
-    // Check Cargo.toml
-    const cargo = fs.readFileSync(path.join('src-tauri', 'Cargo.toml'), 'utf8');
-    const m = cargo.match(/^version\s*=\s*"([^"]+)"/m);
-    const cargoVer = m ? m[1] : null;
-    if (cargoVer !== version) {
-        console.log(`  ❌ Cargo.toml: ${cargoVer} (expected ${version})`);
-        ok = false;
-    } else {
-        console.log(`  ✅ Cargo.toml: ${cargoVer}`);
-    }
-    if (!ok) {
-        console.log(`\n❌ Version mismatch! Run 'just sync-version' to fix.`);
-        process.exit(1);
-    }
-    console.log(`✅ All versions match: ${version}`);
+    node scripts/check-version.cjs
 
 # ===== CI COMMANDS =====
 
@@ -210,14 +147,17 @@ ci-fix: ensure-rust
 # ===== UTILITIES =====
 
 # Clean build artifacts
+[unix]
 clean:
     @echo "🧹 Cleaning build artifacts..."
-    @rm -rf dist/ 2>nul || echo "" >nul
-    @rm -rf src-tauri/target/ 2>nul || echo "" >nul
-    @rm -rf node_modules/ 2>nul || echo "" >nul
-    @rm -rf docs/.vitepress/dist/ 2>nul || echo "" >nul
-    @rm -rf docs/.vitepress/cache/ 2>nul || echo "" >nul
+    rm -rf dist/ src-tauri/target/ node_modules/ docs/.vitepress/dist/ docs/.vitepress/cache/
     @echo "✨ Clean complete!"
+
+# Clean build artifacts (Windows)
+[windows]
+clean:
+    @echo "🧹 Cleaning build artifacts..."
+    node -e "const fs=require('fs');['dist','src-tauri/target','node_modules','docs/.vitepress/dist','docs/.vitepress/cache'].forEach(p=>{try{fs.rmSync(p,{recursive:true,force:true})}catch(e){}});console.log('✨ Clean complete!');"
 
 # List all recipes
 list:
