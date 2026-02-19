@@ -103,10 +103,84 @@ docs-preview: ensure-node-deps
     @echo "👀 Previewing documentation build..."
     pnpm docs:preview
 
+# ===== VERSION MANAGEMENT =====
+
+# Sync all project versions to match package.json (single source of truth)
+sync-version:
+    #!/usr/bin/env node
+    const fs = require('fs');
+    const path = require('path');
+    const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+    const version = pkg.version;
+    console.log(`🔄 Syncing versions to ${version} (from package.json)...`);
+    let changed = false;
+    // Sync tauri.conf.json
+    const tauriPath = path.join('src-tauri', 'tauri.conf.json');
+    const tauri = JSON.parse(fs.readFileSync(tauriPath, 'utf8'));
+    if (tauri.version !== version) {
+        console.log(`  → tauri.conf.json: ${tauri.version} → ${version}`);
+        tauri.version = version;
+        fs.writeFileSync(tauriPath, JSON.stringify(tauri, null, 2) + '\n');
+        changed = true;
+    } else {
+        console.log(`  ✓ tauri.conf.json: ${tauri.version} (ok)`);
+    }
+    // Sync Cargo.toml
+    const cargoPath = path.join('src-tauri', 'Cargo.toml');
+    let cargo = fs.readFileSync(cargoPath, 'utf8');
+    const m = cargo.match(/^version\s*=\s*"([^"]+)"/m);
+    const cargoVer = m ? m[1] : null;
+    if (cargoVer !== version) {
+        console.log(`  → Cargo.toml: ${cargoVer} → ${version}`);
+        cargo = cargo.replace(/^version\s*=\s*"[^"]+"/m, `version = "${version}"`);
+        fs.writeFileSync(cargoPath, cargo);
+        changed = true;
+    } else {
+        console.log(`  ✓ Cargo.toml: ${cargoVer} (ok)`);
+    }
+    if (changed) {
+        console.log(`✅ Versions synced to ${version}`);
+    } else {
+        console.log(`✅ All versions already at ${version}`);
+    }
+
+# Check version consistency without modifying files (strict CI mode)
+check-version:
+    #!/usr/bin/env node
+    const fs = require('fs');
+    const path = require('path');
+    const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+    const version = pkg.version;
+    console.log(`🔍 Checking version consistency (expected: ${version})...`);
+    let ok = true;
+    // Check tauri.conf.json
+    const tauri = JSON.parse(fs.readFileSync(path.join('src-tauri', 'tauri.conf.json'), 'utf8'));
+    if (tauri.version !== version) {
+        console.log(`  ❌ tauri.conf.json: ${tauri.version} (expected ${version})`);
+        ok = false;
+    } else {
+        console.log(`  ✅ tauri.conf.json: ${tauri.version}`);
+    }
+    // Check Cargo.toml
+    const cargo = fs.readFileSync(path.join('src-tauri', 'Cargo.toml'), 'utf8');
+    const m = cargo.match(/^version\s*=\s*"([^"]+)"/m);
+    const cargoVer = m ? m[1] : null;
+    if (cargoVer !== version) {
+        console.log(`  ❌ Cargo.toml: ${cargoVer} (expected ${version})`);
+        ok = false;
+    } else {
+        console.log(`  ✅ Cargo.toml: ${cargoVer}`);
+    }
+    if (!ok) {
+        console.log(`\n❌ Version mismatch! Run 'just sync-version' to fix.`);
+        process.exit(1);
+    }
+    console.log(`✅ All versions match: ${version}`);
+
 # ===== CI COMMANDS =====
 
-# Run all CI checks (lint, type check, static analysis)
-ci: ensure-node-deps ensure-rust ci-frontend ci-rust
+# Run all CI checks (version sync, lint, type check, static analysis)
+ci: ensure-node-deps ensure-rust sync-version ci-frontend ci-rust
     @echo "✅ All CI checks passed!"
 
 # Run frontend CI checks
