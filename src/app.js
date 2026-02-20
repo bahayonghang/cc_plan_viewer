@@ -2,9 +2,11 @@
 // Supports both Tauri (desktop) and browser modes
 
 import { t, getCurrentLang, toggleLang, applyI18n, onLangChange } from './i18n.js';
-import { initStyles, applyPlanStyles, clearPlanStyles, setPreset,
-         getPreset, getPresetList, onThemeChange, updatePresetSelector,
-         openCssEditor, closeCssEditor, saveGlobalCustomCSS, getGlobalCustomCSS } from './styles.js';
+import {
+  initStyles, applyPlanStyles, clearPlanStyles, setPreset,
+  getPreset, getPresetList, onThemeChange, updatePresetSelector,
+  openCssEditor, closeCssEditor, saveGlobalCustomCSS, getGlobalCustomCSS
+} from './styles.js';
 import { icon } from './icons.js';
 
 // 初始化静态 HTML 元素的 SVG 图标
@@ -92,7 +94,7 @@ async function api(path, options = {}) {
       });
     }
   }
-  
+
   // Browser mode - use fetch
   const res = await fetch('/api' + path, {
     headers: { 'Content-Type': 'application/json' },
@@ -120,13 +122,13 @@ function applyTheme(theme) {
   } else {
     document.documentElement.removeAttribute('data-theme');
   }
-  
+
   // Toggle icons
   const sunIcon = document.getElementById('themeIconSun');
   const moonIcon = document.getElementById('themeIconMoon');
   if (sunIcon) sunIcon.style.display = theme === 'dark' ? 'block' : 'none';
   if (moonIcon) moonIcon.style.display = theme === 'light' ? 'block' : 'none';
-  
+
   // Swap highlight.js theme
   const hljsLink = document.getElementById('hljs-theme');
   if (hljsLink) {
@@ -179,13 +181,13 @@ function renderSourceTabs() {
 
   // 构建 tab 列表
   const tabs = [
-    { value: 'windows', label: icon('monitor', 14) + ' Windows', icon: '' }
+    { value: 'windows', label: 'Windows', iconSvg: icon('monitor', 14) }
   ];
 
   // WSL tabs
   if (window.wslInfo?.available) {
     for (const d of window.wslInfo.distributions) {
-      tabs.push({ value: `wsl:${d}`, label: icon('terminal', 14) + ` ${d}`, icon: '' });
+      tabs.push({ value: `wsl:${d}`, label: d, iconSvg: icon('terminal', 14) });
     }
   }
 
@@ -195,8 +197,8 @@ function renderSourceTabs() {
     const statusClass = status === 'connected' ? 'connected' : (status === 'connecting' ? 'connecting' : '');
     tabs.push({
       value: `ssh:${cfg.id}`,
-      label: icon('server', 14) + ` ${cfg.name}`,
-      icon: '',
+      label: cfg.name,
+      iconSvg: icon('server', 14),
       ssh: true,
       configId: cfg.id,
       statusClass
@@ -210,6 +212,7 @@ function renderSourceTabs() {
       oncontextmenu="${t.ssh ? `event.preventDefault();openSshTabContextMenu(event, '${escapeAttr(t.configId)}')` : ''}"
       title="${escapeAttr(t.label)}">
       ${t.ssh ? `<span class="ssh-status-dot ${t.statusClass}"></span>` : ''}
+      <span class="source-tab-icon">${t.iconSvg}</span>
       <span class="source-tab-label">${escapeHtml(t.label)}</span>
     </button>
   `).join('') + `
@@ -458,7 +461,7 @@ async function testSshConnection() {
       resultEl.textContent = '';
       resultEl.insertAdjacentHTML('beforeend', icon('checkCircle', 14) + ' ' + result.message);
       // 测试成功后断开（避免占用连接）
-      await invoke('disconnect_ssh', { configId: id }).catch(() => {});
+      await invoke('disconnect_ssh', { configId: id }).catch(() => { });
     } else {
       resultEl.className = 'ssh-test-result error';
       resultEl.textContent = '';
@@ -796,10 +799,10 @@ async function renderMarkdown(content, comments) {
     for (const block of allCodeBlocks) {
       const text = block.textContent.trim();
       if (text.startsWith('graph ') || text.startsWith('sequenceDiagram') ||
-          text.startsWith('classDiagram') || text.startsWith('flowchart') ||
-          text.startsWith('erDiagram') || text.startsWith('gantt') ||
-          text.startsWith('pie') || text.startsWith('gitgraph') ||
-          text.startsWith('stateDiagram')) {
+        text.startsWith('classDiagram') || text.startsWith('flowchart') ||
+        text.startsWith('erDiagram') || text.startsWith('gantt') ||
+        text.startsWith('pie') || text.startsWith('gitgraph') ||
+        text.startsWith('stateDiagram')) {
         const pre = block.parentElement;
         const mermaidDiv = document.createElement('div');
         mermaidDiv.className = 'mermaid';
