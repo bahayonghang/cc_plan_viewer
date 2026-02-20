@@ -17,47 +17,52 @@
 }
 
 :root {
-  --bg-primary: #0F172A;
-  --bg-secondary: #1E293B;
+  /* Dark Mode (Slate-based modern palette) */
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
   --bg-tertiary: #334155;
   --bg-hover: #475569;
   --border-primary: #334155;
-  --border-accent: #3B82F6;
-  --text-primary: #F8FAFC;
-  --text-secondary: #94A3B8;
-  --text-muted: #64748B;
-  --accent-blue: #3B82F6;
-  --accent-green: #22C55E;
-  --accent-orange: #F59E0B;
-  --accent-red: #EF4444;
-  --accent-purple: #A78BFA;
-  --accent-cyan: #06B6D4;
-  --comment-bg: #1E293B;
+  --border-accent: #3b82f6;
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --accent-blue: #3b82f6;
+  --accent-green: #22c55e;
+  --accent-orange: #f59e0b;
+  --accent-red: #ef4444;
+  --accent-purple: #a855f7;
+  --accent-cyan: #06b6d4;
+  --comment-bg: #1e293b;
   --sidebar-width: 300px;
   --topbar-height: 56px;
   --comment-panel-width: 320px;
-  --panel-section-hover: rgba(59, 130, 246, 0.06);
+  --panel-section-hover: rgba(59, 130, 246, 0.08);
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   --font-mono: 'JetBrains Mono', 'SF Mono', 'Cascadia Code', monospace;
   --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 html[data-theme="light"] {
-  --bg-primary: #FFFFFF;
-  --bg-secondary: #F8FAFC;
-  --bg-tertiary: #F1F5F9;
-  --bg-hover: #E2E8F0;
-  --border-primary: #CBD5E1;
-  --border-accent: #2563EB;
-  --text-primary: #0F172A;
+  /* Light Mode (Slate-based modern palette) */
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8fafc;
+  --bg-tertiary: #f1f5f9;
+  --bg-hover: #e2e8f0;
+  --border-primary: #cbd5e1;
+  --border-accent: #2563eb;
+  --text-primary: #0f172a;
   --text-secondary: #475569;
-  --text-muted: #94A3B8;
-  --accent-blue: #2563EB;
-  --accent-green: #16A34A;
-  --accent-orange: #D97706;
-  --accent-red: #DC2626;
-  --accent-purple: #7C3AED;
-  --accent-cyan: #0891B2;
-  --comment-bg: #F1F5F9;
+  --text-muted: #94a3b8;
+  --accent-blue: #2563eb;
+  --accent-green: #16a34a;
+  --accent-orange: #d97706;
+  --accent-red: #dc2626;
+  --accent-purple: #9333ea;
+  --accent-cyan: #0891b2;
+  --comment-bg: #f8fafc;
+  --panel-section-hover: rgba(37, 99, 235, 0.04);
 }
 
 html { font-size: 14px; }
@@ -82,6 +87,7 @@ body {
   gap: 16px;
   flex-shrink: 0;
   z-index: 10;
+  box-shadow: var(--shadow-sm);
 }
 .topbar-logo {
   display: flex;
@@ -303,14 +309,25 @@ html[data-theme="light"] .theme-switch-thumb {
   padding: 12px;
   border-radius: 8px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   margin-bottom: 4px;
   border: 1px solid transparent;
+  background: transparent;
   content-visibility: auto;
   contain-intrinsic-size: auto 60px;
 }
-.plan-item:hover { background: var(--bg-tertiary); transform: translateX(2px); }
-.plan-item.active { background: rgba(59, 130, 246, 0.08); border-left: 3px solid var(--accent-blue); border-color: rgba(59, 130, 246, 0.2); }
+.plan-item:hover { 
+  background: var(--bg-tertiary); 
+  transform: translateX(4px); 
+  box-shadow: var(--shadow-sm);
+}
+.plan-item.active { 
+  background: rgba(59, 130, 246, 0.1); 
+  border-left: 3px solid var(--accent-blue); 
+  border-color: rgba(59, 130, 246, 0.2); 
+  box-shadow: var(--shadow-sm);
+  transform: translateX(2px);
+}
 .plan-item-name {
   font-size: 0.9rem;
   font-weight: 500;
@@ -384,20 +401,32 @@ body, .topbar, .sidebar, .content-area, .toolbar, .modal, .comment-panel {
   cursor: pointer;
   font-size: 0.82rem;
   font-family: var(--font-sans);
-  transition: all 0.15s;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   align-items: center;
   gap: 6px;
   min-height: 36px;
 }
-.toolbar-btn:hover { border-color: var(--accent-blue); color: var(--accent-blue); transform: translateY(-1px); box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-.toolbar-btn:active { transform: translateY(0); }
+.toolbar-btn:hover { 
+  border-color: var(--accent-blue); 
+  color: var(--accent-blue); 
+  transform: translateY(-2px); 
+  box-shadow: var(--shadow-md); 
+}
+.toolbar-btn:active { 
+  transform: translateY(0); 
+  box-shadow: none;
+}
 .toolbar-btn.primary {
   background: var(--accent-blue);
   color: #fff;
   border-color: var(--accent-blue);
+  box-shadow: 0 2px 4px rgba(59, 130, 246, 0.25);
 }
-.toolbar-btn.primary:hover { opacity: 0.85; }
+.toolbar-btn.primary:hover { 
+  opacity: 0.9; 
+  box-shadow: 0 4px 8px rgba(59, 130, 246, 0.35);
+}
 .toolbar-spacer { flex: 1; }
 
 /* 显示预设选择器 */
