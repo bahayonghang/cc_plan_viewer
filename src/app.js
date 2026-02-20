@@ -5,6 +5,27 @@ import { t, getCurrentLang, toggleLang, applyI18n, onLangChange } from './i18n.j
 import { initStyles, applyPlanStyles, clearPlanStyles, setPreset,
          getPreset, getPresetList, onThemeChange, updatePresetSelector,
          openCssEditor, closeCssEditor, saveGlobalCustomCSS, getGlobalCustomCSS } from './styles.js';
+import { icon } from './icons.js';
+
+// 初始化静态 HTML 元素的 SVG 图标
+function initIcons() {
+  const iconMap = {
+    sidebarIcon: 'clipboardList',
+    commentPanelIcon: 'messageCircle',
+    refreshIcon: 'refreshCw',
+    panelTitleIcon: 'messageCircle',
+    tooltipIcon: 'messageCircle',
+    ctxEditIcon: 'penLine',
+    ctxDisconnectIcon: 'plug',
+    ctxDeleteIcon: 'trash2',
+    sshTestIcon: 'plug',
+    searchIcon: 'search'
+  };
+  for (const [id, name] of Object.entries(iconMap)) {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = icon(name, 14);
+  }
+}
 
 // 平台检测
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
@@ -158,13 +179,13 @@ function renderSourceTabs() {
 
   // 构建 tab 列表
   const tabs = [
-    { value: 'windows', label: '🪟 Windows', icon: '🪟' }
+    { value: 'windows', label: icon('monitor', 14) + ' Windows', icon: '' }
   ];
 
   // WSL tabs
   if (window.wslInfo?.available) {
     for (const d of window.wslInfo.distributions) {
-      tabs.push({ value: `wsl:${d}`, label: `🐧 ${d}`, icon: '🐧' });
+      tabs.push({ value: `wsl:${d}`, label: icon('terminal', 14) + ` ${d}`, icon: '' });
     }
   }
 
@@ -174,8 +195,8 @@ function renderSourceTabs() {
     const statusClass = status === 'connected' ? 'connected' : (status === 'connecting' ? 'connecting' : '');
     tabs.push({
       value: `ssh:${cfg.id}`,
-      label: `🖥️ ${cfg.name}`,
-      icon: '🖥️',
+      label: icon('server', 14) + ` ${cfg.name}`,
+      icon: '',
       ssh: true,
       configId: cfg.id,
       statusClass
@@ -434,12 +455,14 @@ async function testSshConnection() {
     const result = await invoke('test_ssh_connection', { configData });
     if (result.success) {
       resultEl.className = 'ssh-test-result success';
-      resultEl.textContent = '✅ ' + result.message;
+      resultEl.textContent = '';
+      resultEl.insertAdjacentHTML('beforeend', icon('checkCircle', 14) + ' ' + result.message);
       // 测试成功后断开（避免占用连接）
       await invoke('disconnect_ssh', { configId: id }).catch(() => {});
     } else {
       resultEl.className = 'ssh-test-result error';
-      resultEl.textContent = '❌ ' + result.message;
+      resultEl.textContent = '';
+      resultEl.insertAdjacentHTML('beforeend', icon('xCircle', 14) + ' ' + result.message);
     }
   } catch (e) {
     resultEl.className = 'ssh-test-result error';
@@ -497,9 +520,87 @@ async function handleSshContextAction(action, configId) {
   }
 }
 
+// 骨架屏渲染
+function renderPlanListSkeleton(count = 5) {
+  return Array.from({ length: count }, () =>
+    '<div class="skeleton skeleton-plan-item"></div>'
+  ).join('');
+}
+
+function renderContentSkeleton() {
+  return `
+    <div style="padding: 32px 48px;">
+      <div class="skeleton skeleton-content-heading" style="width:70%"></div>
+      <div class="skeleton skeleton-content-line" style="width:100%"></div>
+      <div class="skeleton skeleton-content-line" style="width:90%"></div>
+      <div class="skeleton skeleton-content-line" style="width:95%"></div>
+      <div class="skeleton skeleton-content-line" style="width:60%"></div>
+      <div class="skeleton skeleton-content-heading" style="width:50%"></div>
+      <div class="skeleton skeleton-content-line" style="width:100%"></div>
+      <div class="skeleton skeleton-content-line" style="width:85%"></div>
+      <div class="skeleton skeleton-content-line" style="width:75%"></div>
+    </div>`;
+}
+
+// 计划列表搜索过滤
+let searchDebounceTimer = null;
+function filterPlanList(query) {
+  clearTimeout(searchDebounceTimer);
+  searchDebounceTimer = setTimeout(() => {
+    const items = document.querySelectorAll('.plan-item');
+    const q = query.toLowerCase().trim();
+    items.forEach(item => {
+      const name = item.querySelector('.plan-item-name')?.textContent.toLowerCase() || '';
+      item.style.display = (!q || name.includes(q)) ? '' : 'none';
+    });
+  }, 150);
+}
+
+// 按钮加载状态工具函数
+async function withLoading(buttonEl, asyncFn) {
+  if (!buttonEl) return asyncFn();
+  buttonEl.classList.add('loading');
+  buttonEl.disabled = true;
+  try {
+    return await asyncFn();
+  } finally {
+    buttonEl.classList.remove('loading');
+    buttonEl.disabled = false;
+  }
+}
+
+// 动态加载 highlight.js（仅在检测到代码块时）
+let hljsLoaded = false;
+async function ensureHighlightJs() {
+  if (hljsLoaded || window.hljs) {
+    hljsLoaded = true;
+    return;
+  }
+  return new Promise((resolve) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js';
+    script.onload = () => {
+      // 加载 marked-highlight 集成
+      const script2 = document.createElement('script');
+      script2.src = 'https://cdnjs.cloudflare.com/ajax/libs/marked-highlight/2.2.2/index.umd.min.js';
+      script2.onload = () => {
+        hljsLoaded = true;
+        resolve();
+      };
+      script2.onerror = () => { hljsLoaded = true; resolve(); };
+      document.head.appendChild(script2);
+    };
+    script.onerror = resolve;
+    document.head.appendChild(script);
+  });
+}
+
 // Render plan list
 async function loadPlanList() {
   const listEl = document.getElementById('planList');
+
+  // 显示骨架屏
+  listEl.innerHTML = renderPlanListSkeleton();
 
   // SSH 来源显示加载指示器
   if (window.currentSource?.startsWith('ssh:')) {
@@ -510,7 +611,7 @@ async function loadPlanList() {
   try {
     plans = await api('/plans');
   } catch (e) {
-    listEl.innerHTML = `<div style="padding:20px;color:var(--accent-red);font-size:0.85rem;">❌ ${t('sidebar.loadError')}: ${escapeHtml(String(e))}</div>`;
+    listEl.innerHTML = `<div style="padding:20px;color:var(--accent-red);font-size:0.85rem;">${icon('xCircle', 14)} ${t('sidebar.loadError')}: ${escapeHtml(String(e))}</div>`;
     return null;
   }
 
@@ -524,7 +625,7 @@ async function loadPlanList() {
       <div class="plan-item-name" title="${p.name}">${p.name}</div>
       <div class="plan-item-meta">
         <span>${timeAgo(p.modified)}</span>
-        ${p.commentCount > 0 ? `<span class="badge">${p.commentCount} 💬</span>` : ''}
+        ${p.commentCount > 0 ? `<span class="badge">${p.commentCount} ${icon('messageCircle', 12)}</span>` : ''}
       </div>
     </div>
   `).join('');
@@ -542,6 +643,13 @@ function updateSidebarActiveState(planId) {
 // Load and render a single plan
 async function loadPlan(planId) {
   window.currentPlanId = planId;
+
+  // 显示内容骨架屏
+  document.getElementById('emptyState').style.display = 'none';
+  const planView = document.getElementById('planView');
+  planView.style.display = 'flex';
+  document.getElementById('mdContent').innerHTML = renderContentSkeleton();
+
   const plan = await api(`/plans/${encodeURIComponent(planId)}`);
   if (!plan) return;
   window.currentPlan = plan;
@@ -549,17 +657,12 @@ async function loadPlan(planId) {
   // 应用计划内嵌 CSS
   applyPlanStyles(plan.content);
 
-  // Show plan view, hide empty state
-  document.getElementById('emptyState').style.display = 'none';
-  const planView = document.getElementById('planView');
-  planView.style.display = 'flex';
-
   // Update toolbar
   document.getElementById('planFileName').textContent = plan.name;
   document.getElementById('planModified').textContent = `${t('toolbar.modified')}: ${new Date(plan.modified).toLocaleString()}`;
 
   // Render markdown with section wrappers and inline comments
-  renderMarkdown(plan.content, plan.comments);
+  await renderMarkdown(plan.content, plan.comments);
 
   // Update sidebar active state (lightweight DOM update, no IPC)
   updateSidebarActiveState(planId);
@@ -584,8 +687,13 @@ function loadMermaidIfNeeded(mdPane) {
 }
 
 // Render markdown content
-function renderMarkdown(content, comments) {
+async function renderMarkdown(content, comments) {
   const mdPane = document.getElementById('mdContent');
+
+  // 检测代码块并按需加载 highlight.js
+  if (content.includes('```') || content.includes('    ')) {
+    await ensureHighlightJs();
+  }
 
   // First, render raw markdown
   let html = window.marked.parse(content);
@@ -657,7 +765,7 @@ function renderMarkdown(content, comments) {
               <div class="inline-comment-meta">${timeAgo(c.createdAt)}</div>
             </div>
             <div class="inline-comment-actions">
-              <button onclick="deleteComment('${c.id}')" title="Delete">🗑️</button>
+              <button onclick="deleteComment('${c.id}')" title="Delete">${icon('trash2', 14)}</button>
             </div>
           </div>`;
       }
@@ -824,7 +932,7 @@ function openCommentForm(trigger, sectionTitle, selectedText) {
   let contextHtml = '';
   if (selectedText) {
     const excerpt = selectedText.length > 80 ? selectedText.slice(0, 80) + '...' : selectedText;
-    contextHtml = `<div class="inline-form-context">📝 "${escapeHtml(excerpt)}"</div>`;
+    contextHtml = `<div class="inline-form-context">"${escapeHtml(excerpt)}"</div>`;
   }
 
   const placeholderText = t('comments.leaveComment');
@@ -837,11 +945,11 @@ function openCommentForm(trigger, sectionTitle, selectedText) {
       <textarea id="inlineCommentText" placeholder="${escapeAttr(placeholderText)}" rows="2"></textarea>
       <div class="inline-form-row">
         <div class="inline-form-types">
-          <button class="type-btn active" data-type="comment" title="${escapeAttr(t('commentType.comment'))}" onclick="selectCommentType(this)">💬</button>
-          <button class="type-btn" data-type="suggestion" title="${escapeAttr(t('commentType.suggestion'))}" onclick="selectCommentType(this)">💡</button>
-          <button class="type-btn" data-type="question" title="${escapeAttr(t('commentType.question'))}" onclick="selectCommentType(this)">❓</button>
-          <button class="type-btn" data-type="approve" title="${escapeAttr(t('commentType.approve'))}" onclick="selectCommentType(this)">✅</button>
-          <button class="type-btn" data-type="reject" title="${escapeAttr(t('commentType.reject'))}" onclick="selectCommentType(this)">❌</button>
+          <button class="type-btn active" data-type="comment" title="${escapeAttr(t('commentType.comment'))}" onclick="selectCommentType(this)">${icon('messageCircle', 16)}</button>
+          <button class="type-btn" data-type="suggestion" title="${escapeAttr(t('commentType.suggestion'))}" onclick="selectCommentType(this)">${icon('lightbulb', 16)}</button>
+          <button class="type-btn" data-type="question" title="${escapeAttr(t('commentType.question'))}" onclick="selectCommentType(this)">${icon('helpCircle', 16)}</button>
+          <button class="type-btn" data-type="approve" title="${escapeAttr(t('commentType.approve'))}" onclick="selectCommentType(this)">${icon('checkCircle', 16)}</button>
+          <button class="type-btn" data-type="reject" title="${escapeAttr(t('commentType.reject'))}" onclick="selectCommentType(this)">${icon('xCircle', 16)}</button>
         </div>
         <div class="inline-form-actions">
           <button class="toolbar-btn" onclick="closeAllInlineForms()">${escapeHtml(cancelText)}</button>
@@ -996,8 +1104,8 @@ function renderCommentPanel(comments) {
 function buildPanelCommentItem(c) {
   const type = c.type || c.comment_type || 'comment';
   const hasSelection = !!c.selectedText;
-  const emojiMap = { comment: '💬', suggestion: '💡', question: '❓', approve: '✅', reject: '❌' };
-  const emoji = emojiMap[type] || '💬';
+  const emojiMap = { comment: icon('messageCircle', 14), suggestion: icon('lightbulb', 14), question: icon('helpCircle', 14), approve: icon('checkCircle', 14), reject: icon('xCircle', 14) };
+  const emoji = emojiMap[type] || icon('messageCircle', 14);
   const textExcerpt = c.text.length > 80 ? c.text.slice(0, 80) + '...' : c.text;
 
   return `
@@ -1008,7 +1116,7 @@ function buildPanelCommentItem(c) {
         <div class="panel-comment-text">${escapeHtml(textExcerpt)}</div>
         <div class="panel-comment-meta">${timeAgo(c.createdAt)}</div>
       </div>
-      <button class="panel-comment-delete" onclick="event.stopPropagation();deleteComment('${c.id}')" title="Delete">🗑️</button>
+      <button class="panel-comment-delete" onclick="event.stopPropagation();deleteComment('${c.id}')" title="Delete">${icon('trash2', 14)}</button>
     </div>`;
 }
 
@@ -1018,11 +1126,11 @@ function renderEvaluationSection(container, planEvals) {
   html += `<div class="panel-eval-header">${t('panel.evaluation')}</div>`;
   html += `<div class="panel-eval-form">`;
   html += `<div class="panel-eval-types">`;
-  html += `<button class="type-btn active" data-type="comment" title="${escapeAttr(t('commentType.comment'))}" onclick="selectEvalType(this)">💬</button>`;
-  html += `<button class="type-btn" data-type="suggestion" title="${escapeAttr(t('commentType.suggestion'))}" onclick="selectEvalType(this)">💡</button>`;
-  html += `<button class="type-btn" data-type="question" title="${escapeAttr(t('commentType.question'))}" onclick="selectEvalType(this)">❓</button>`;
-  html += `<button class="type-btn" data-type="approve" title="${escapeAttr(t('commentType.approve'))}" onclick="selectEvalType(this)">✅</button>`;
-  html += `<button class="type-btn" data-type="reject" title="${escapeAttr(t('commentType.reject'))}" onclick="selectEvalType(this)">❌</button>`;
+  html += `<button class="type-btn active" data-type="comment" title="${escapeAttr(t('commentType.comment'))}" onclick="selectEvalType(this)">${icon('messageCircle', 16)}</button>`;
+  html += `<button class="type-btn" data-type="suggestion" title="${escapeAttr(t('commentType.suggestion'))}" onclick="selectEvalType(this)">${icon('lightbulb', 16)}</button>`;
+  html += `<button class="type-btn" data-type="question" title="${escapeAttr(t('commentType.question'))}" onclick="selectEvalType(this)">${icon('helpCircle', 16)}</button>`;
+  html += `<button class="type-btn" data-type="approve" title="${escapeAttr(t('commentType.approve'))}" onclick="selectEvalType(this)">${icon('checkCircle', 16)}</button>`;
+  html += `<button class="type-btn" data-type="reject" title="${escapeAttr(t('commentType.reject'))}" onclick="selectEvalType(this)">${icon('xCircle', 16)}</button>`;
   html += `</div>`;
   html += `<textarea class="panel-eval-textarea" id="evalText" placeholder="${escapeAttr(t('panel.evalPlaceholder'))}" rows="2"></textarea>`;
   html += `<button class="panel-eval-submit" onclick="submitEvaluation()">${escapeHtml(t('comments.addCommentBtn'))}</button>`;
@@ -1033,16 +1141,16 @@ function renderEvaluationSection(container, planEvals) {
     html += `<div class="panel-eval-list">`;
     for (const c of planEvals) {
       const type = c.type || c.comment_type || 'comment';
-      const emojiMap = { comment: '💬', suggestion: '💡', question: '❓', approve: '✅', reject: '❌' };
+      const emojiMap = { comment: icon('messageCircle', 14), suggestion: icon('lightbulb', 14), question: icon('helpCircle', 14), approve: icon('checkCircle', 14), reject: icon('xCircle', 14) };
       html += `
         <div class="panel-eval-item ${type}">
-          <span>${emojiMap[type] || '💬'}</span>
+          <span>${emojiMap[type] || icon('messageCircle', 14)}</span>
           <div class="inline-comment-text">
             ${escapeHtml(c.text)}
             <div class="inline-comment-meta">${timeAgo(c.createdAt)}</div>
           </div>
           <div class="inline-comment-actions">
-            <button onclick="deleteComment('${c.id}')" title="Delete">🗑️</button>
+            <button onclick="deleteComment('${c.id}')" title="Delete">${icon('trash2', 14)}</button>
           </div>
         </div>`;
     }
@@ -1168,13 +1276,16 @@ export async function initApp() {
   // Apply saved theme
   applyTheme(localStorage.getItem('theme') || 'dark');
 
+  // 初始化 SVG 图标
+  initIcons();
+
   // 初始化样式注入系统
   await initStyles();
 
   // 注册语言切换回调 - 重渲染动态内容
-  onLangChange(() => {
+  onLangChange(async () => {
     if (window.currentPlan) {
-      renderMarkdown(window.currentPlan.content, window.currentPlan.comments);
+      await renderMarkdown(window.currentPlan.content, window.currentPlan.comments);
     }
     loadPlanList();
     renderSourceTabs();
@@ -1213,6 +1324,7 @@ export async function initApp() {
   window.submitEvaluation = submitEvaluation;
   window.panelCommentClick = panelCommentClick;
   window.togglePanelSection = togglePanelSection;
+  window.filterPlanList = filterPlanList;
 
   // WSL 检测（仅 Tauri 模式）
   if (window.useTauri) {
@@ -1230,6 +1342,12 @@ export async function initApp() {
     }
   }
   renderSourceTabs();
+
+  // 搜索框事件
+  const searchInput = document.getElementById('planSearchInput');
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => filterPlanList(e.target.value));
+  }
 
   // 恢复评论面板状态
   applyCommentPanelState();

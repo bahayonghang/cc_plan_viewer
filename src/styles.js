@@ -78,6 +78,19 @@ const PRESETS = {
       .md-section:hover { border-left-color: transparent !important; }
       .comment-trigger { left: -28px; }
     `
+  },
+  focus: {
+    label: { zh: '专注', en: 'Focus' },
+    css: `
+      .markdown-pane { max-width: 720px; margin: 0 auto; padding: 40px 48px 100px; }
+      .md-content { font-size: 1rem; }
+      .md-content p { line-height: 1.9; }
+      .md-section { border-left: none !important; padding-left: 0; }
+      .md-section:hover { border-left-color: transparent !important; }
+      .comment-trigger { display: none !important; }
+      .section-comments { display: none !important; }
+      .inline-comment-card { display: none !important; }
+    `
   }
 };
 
