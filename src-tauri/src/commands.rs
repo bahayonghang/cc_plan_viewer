@@ -1,5 +1,6 @@
 // ── Tauri Commands ──────────────────────────────────────────
 
+use crate::cache::PlanListCache;
 use crate::plan::{self, Comment, CommentData, Plan, PlanInfo};
 use crate::source::{self, PlanSource, WslInfo};
 use crate::ssh::config::{self, SshHostConfig};
@@ -29,6 +30,7 @@ pub async fn detect_wsl() -> Result<WslInfo, String> {
 pub async fn get_plans(
     source: Option<String>,
     ssh_mgr: State<'_, SshConnectionManager>,
+    cache: State<'_, PlanListCache>,
 ) -> Result<Vec<PlanInfo>, String> {
     let ps = PlanSource::from_opt(source.as_deref());
     match ps {
@@ -36,7 +38,31 @@ pub async fn get_plans(
         _ => {
             let plans_dir = source::get_plans_dir_for(&ps)?;
             let comments_dir = source::get_comments_dir_for(&ps)?;
-            Ok(plan::list_plans(&plans_dir, &comments_dir))
+            let cache_key = plans_dir.to_string_lossy().to_string();
+
+            // 检查目录修改时间用于缓存验证
+            let dir_mtime = std::fs::metadata(&plans_dir)
+                .and_then(|m| m.modified())
+                .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+
+            // 尝试命中缓存
+            if let Some(cached) = cache.get_if_valid(&cache_key, dir_mtime) {
+                return Ok(cached);
+            }
+
+            // 缓存未命中，从磁盘读取（使用 spawn_blocking 避免阻塞异步运行时）
+            let plans_dir_clone = plans_dir.clone();
+            let comments_dir_clone = comments_dir.clone();
+            let plans = tokio::task::spawn_blocking(move || {
+                plan::list_plans(&plans_dir_clone, &comments_dir_clone)
+            })
+            .await
+            .map_err(|e| format!("任务执行失败: {}", e))?;
+
+            // 更新缓存
+            cache.update(&cache_key, plans.clone(), dir_mtime);
+
+            Ok(plans)
         }
     }
 }
@@ -53,7 +79,9 @@ pub async fn get_plan_by_id(
         _ => {
             let plans_dir = source::get_plans_dir_for(&ps)?;
             let comments_dir = source::get_comments_dir_for(&ps)?;
-            Ok(plan::get_plan(&plan_id, &plans_dir, &comments_dir))
+            tokio::task::spawn_blocking(move || plan::get_plan(&plan_id, &plans_dir, &comments_dir))
+                .await
+                .map_err(|e| format!("任务执行失败: {}", e))
         }
     }
 }
@@ -64,6 +92,7 @@ pub async fn add_comment_command(
     comment_data: CommentData,
     source: Option<String>,
     ssh_mgr: State<'_, SshConnectionManager>,
+    cache: State<'_, PlanListCache>,
 ) -> Result<Comment, String> {
     let ps = PlanSource::from_opt(source.as_deref());
     match ps {
@@ -73,7 +102,16 @@ pub async fn add_comment_command(
         _ => {
             let plans_dir = source::get_plans_dir_for(&ps)?;
             let comments_dir = source::get_comments_dir_for(&ps)?;
-            plan::add_comment(&plan_id, comment_data, &plans_dir, &comments_dir)
+
+            // 使缓存失效（评论数变化）
+            let cache_key = plans_dir.to_string_lossy().to_string();
+            cache.invalidate(&cache_key);
+
+            tokio::task::spawn_blocking(move || {
+                plan::add_comment(&plan_id, comment_data, &plans_dir, &comments_dir)
+            })
+            .await
+            .map_err(|e| format!("任务执行失败: {}", e))?
         }
     }
 }
@@ -84,6 +122,7 @@ pub async fn delete_comment_command(
     comment_id: String,
     source: Option<String>,
     ssh_mgr: State<'_, SshConnectionManager>,
+    cache: State<'_, PlanListCache>,
 ) -> Result<bool, String> {
     let ps = PlanSource::from_opt(source.as_deref());
     match ps {
@@ -93,7 +132,16 @@ pub async fn delete_comment_command(
         _ => {
             let plans_dir = source::get_plans_dir_for(&ps)?;
             let comments_dir = source::get_comments_dir_for(&ps)?;
-            plan::delete_comment(&plan_id, &comment_id, &plans_dir, &comments_dir)
+
+            // 使缓存失效
+            let cache_key = plans_dir.to_string_lossy().to_string();
+            cache.invalidate(&cache_key);
+
+            tokio::task::spawn_blocking(move || {
+                plan::delete_comment(&plan_id, &comment_id, &plans_dir, &comments_dir)
+            })
+            .await
+            .map_err(|e| format!("任务执行失败: {}", e))?
         }
     }
 }
@@ -173,20 +221,29 @@ pub async fn get_ssh_connection_status(
 
 #[tauri::command]
 pub async fn get_custom_css() -> Result<Option<String>, String> {
-    let css_path = crate::source::get_claude_dir()
-        .join("plan-viewer")
-        .join("custom.css");
-    if !css_path.exists() {
-        return Ok(None);
-    }
-    std::fs::read_to_string(&css_path)
-        .map(Some)
-        .map_err(|e| format!("读取自定义样式失败: {}", e))
+    tokio::task::spawn_blocking(|| {
+        let css_path = crate::source::get_claude_dir()
+            .join("plan-viewer")
+            .join("custom.css");
+        if !css_path.exists() {
+            return Ok(None);
+        }
+        std::fs::read_to_string(&css_path)
+            .map(Some)
+            .map_err(|e| format!("读取自定义样式失败: {}", e))
+    })
+    .await
+    .map_err(|e| format!("任务执行失败: {}", e))?
 }
 
 #[tauri::command]
 pub async fn save_custom_css(css: String) -> Result<(), String> {
-    let dir = crate::source::get_claude_dir().join("plan-viewer");
-    std::fs::create_dir_all(&dir).map_err(|e| format!("创建目录失败: {}", e))?;
-    std::fs::write(dir.join("custom.css"), css).map_err(|e| format!("保存自定义样式失败: {}", e))
+    tokio::task::spawn_blocking(move || {
+        let dir = crate::source::get_claude_dir().join("plan-viewer");
+        std::fs::create_dir_all(&dir).map_err(|e| format!("创建目录失败: {}", e))?;
+        std::fs::write(dir.join("custom.css"), css)
+            .map_err(|e| format!("保存自定义样式失败: {}", e))
+    })
+    .await
+    .map_err(|e| format!("任务执行失败: {}", e))?
 }

@@ -67,15 +67,18 @@ pub struct CommentData {
 
 // ── Plan Operations ─────────────────────────────────────────
 
-/// Lightweight comment count - avoids full deserialization of Comment structs
+/// 轻量级评论计数 - 使用 BufReader 避免完整字符串分配
 fn count_comments(comments_dir: &Path, plan_filename: &str) -> usize {
     let cf = comments_file_path(comments_dir, plan_filename);
     if !cf.exists() {
         return 0;
     }
-    fs::read_to_string(&cf)
+    std::fs::File::open(&cf)
         .ok()
-        .and_then(|s| serde_json::from_str::<Vec<serde_json::Value>>(&s).ok())
+        .and_then(|file| {
+            let reader = std::io::BufReader::new(file);
+            serde_json::from_reader::<_, Vec<serde_json::Value>>(reader).ok()
+        })
         .map(|v| v.len())
         .unwrap_or(0)
 }
@@ -317,32 +320,39 @@ fn sync_comments_with_plan(plan_id: &str, content: &str, comments_dir: &Path) ->
     let plan_filename = format!("{}.md", plan_id);
     let original_comments = load_comments(comments_dir, &plan_filename);
     let original_count = original_comments.len();
-    let mut comments = original_comments;
 
-    // Direction 1: Remove JSON comments not in plan file
-    let mut synced = Vec::new();
-    for comment in &comments {
-        let block = build_comment_block(comment);
-        if content.contains(&block) {
-            synced.push(comment.clone());
+    // 预计算所有 comment block（O(N) 次调用，而非 O(3N)）
+    let comment_blocks: Vec<(Comment, String)> = original_comments
+        .into_iter()
+        .map(|c| {
+            let block = build_comment_block(&c);
+            (c, block)
+        })
+        .collect();
+
+    // Direction 1: 保留存在于 plan 文件中的评论
+    let mut comments: Vec<Comment> = Vec::new();
+    let mut existing_blocks: HashSet<String> = HashSet::new();
+    for (comment, block) in &comment_blocks {
+        if content.contains(block.as_str()) {
+            comments.push(comment.clone());
+            existing_blocks.insert(block.clone());
         }
     }
-    comments = synced;
 
-    // Direction 2: Add plan-file comments missing from JSON
+    // Direction 2: 添加 plan 文件中存在但 JSON 中缺失的评论
     let plan_comments = parse_comments_from_plan(plan_id, content);
-    let existing_blocks: HashSet<String> = comments.iter().map(build_comment_block).collect();
-
     for pc in plan_comments {
         let candidate = build_comment_block(&pc);
         if !existing_blocks.contains(&candidate) {
             let mut new_comment = pc;
             new_comment.id = format!("comment-{}", Uuid::new_v4());
+            existing_blocks.insert(candidate);
             comments.push(new_comment);
         }
     }
 
-    // Save only if changed (compare with original count to avoid redundant I/O)
+    // 仅在数量变化时保存（避免冗余 I/O）
     if comments.len() != original_count {
         let _ = save_comments(comments_dir, &plan_filename, &comments);
     }
