@@ -64,11 +64,13 @@ tauri-dev: ensure-tauri-deps
 tauri-build: ensure-tauri-deps
     @echo "🏗️  Building Tauri application..."
     pnpm tauri build
+    node scripts/copy-artifacts.cjs
 
 # Build Tauri application (debug mode)
 tauri-build-debug: ensure-tauri-deps
     @echo "🔨 Building Tauri application (debug)..."
     pnpm tauri build --debug
+    node scripts/copy-artifacts.cjs --debug
 
 # ===== VITE COMMANDS =====
 
