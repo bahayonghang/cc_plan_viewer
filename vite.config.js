@@ -6,7 +6,7 @@ export default defineConfig({
   clearScreen: false,
   // Tauri expects the dev server at a specific port
   server: {
-    port: 5173,
+    port: 5174,
     strictPort: true,
   },
   // Tauri uses a custom protocol in production
