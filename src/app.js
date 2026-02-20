@@ -3,7 +3,8 @@
 
 import { t, getCurrentLang, toggleLang, applyI18n, onLangChange } from './i18n.js';
 import { initStyles, applyPlanStyles, clearPlanStyles, setPreset,
-         getPreset, getPresetList, onThemeChange, updatePresetSelector } from './styles.js';
+         getPreset, getPresetList, onThemeChange, updatePresetSelector,
+         openCssEditor, closeCssEditor, saveGlobalCustomCSS, getGlobalCustomCSS } from './styles.js';
 
 // 平台检测
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
@@ -29,6 +30,11 @@ async function api(path, options = {}) {
 
     if (path === '/plans' && options.method !== 'POST') {
       return await invoke('get_plans', { source });
+    }
+
+    if (path === '/custom-css' && options.method === 'POST') {
+      const body = JSON.parse(options.body);
+      return await invoke('save_custom_css', { css: body.css });
     }
 
     if (path === '/custom-css') {
@@ -612,6 +618,8 @@ function renderMarkdown(content, comments) {
   // Build final HTML with section wrappers
   const commentsBySection = {};
   for (const c of (comments || [])) {
+    // 过滤 plan-level 评价，不参与 inline 渲染
+    if (!c.sectionTitle && !c.selectedText) continue;
     const key = c.sectionTitle || '';
     if (!commentsBySection[key]) commentsBySection[key] = [];
     commentsBySection[key].push(c);
@@ -646,7 +654,7 @@ function renderMarkdown(content, comments) {
             <div class="inline-comment-text">
               ${hasSelection ? `<div class="inline-form-context">"${escapeHtml(selectionExcerpt)}"</div>` : ''}
               ${escapeHtml(c.text)}
-              <div class="inline-comment-meta">${timeAgo(c.created_at)}</div>
+              <div class="inline-comment-meta">${timeAgo(c.createdAt)}</div>
             </div>
             <div class="inline-comment-actions">
               <button onclick="deleteComment('${c.id}')" title="Delete">🗑️</button>
@@ -660,6 +668,9 @@ function renderMarkdown(content, comments) {
   }
 
   mdPane.innerHTML = finalHtml;
+
+  // 同步渲染评论面板（不依赖 DOM paint，写入独立的面板元素）
+  renderCommentPanel(comments);
 
   // Render mermaid diagrams
   requestAnimationFrame(async () => {
@@ -906,10 +917,213 @@ function scrollToHighlight(commentId) {
 // Text selection handling
 let pendingSelectionText = '';
 
-// 评论类型选择器
-function selectCommentType(btn) {
-  document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
+// ── 评论面板状态管理 ─────────────────────────────────
+let commentPanelOpen = localStorage.getItem('commentPanelOpen') === 'true';
+
+function toggleCommentPanel() {
+  commentPanelOpen = !commentPanelOpen;
+  localStorage.setItem('commentPanelOpen', commentPanelOpen);
+  applyCommentPanelState();
+}
+
+function applyCommentPanelState() {
+  const panel = document.getElementById('commentPanel');
+  if (panel) {
+    panel.classList.toggle('open', commentPanelOpen);
+  }
+}
+
+// ── 面板渲染 ─────────────────────────────────
+function renderCommentPanel(comments) {
+  const panelComments = document.getElementById('panelComments');
+  const panelEval = document.getElementById('panelEvaluation');
+  const countEl = document.getElementById('commentPanelCount');
+  const badgeEl = document.getElementById('panelBadge');
+  if (!panelComments || !panelEval) return;
+
+  const allComments = comments || [];
+  const totalCount = allComments.length;
+
+  // 更新计数
+  if (countEl) countEl.textContent = totalCount > 0 ? totalCount : '';
+  if (badgeEl) {
+    if (totalCount > 0) {
+      badgeEl.textContent = totalCount;
+      badgeEl.style.display = '';
+    } else {
+      badgeEl.style.display = 'none';
+    }
+  }
+
+  // 分离 plan-level 评价和 section 评论
+  const planEvals = allComments.filter(c => !c.sectionTitle && !c.selectedText);
+  const sectionComments = allComments.filter(c => c.sectionTitle || c.selectedText);
+
+  // 渲染评价区域
+  renderEvaluationSection(panelEval, planEvals);
+
+  // 按 section 分组
+  if (sectionComments.length === 0 && planEvals.length === 0) {
+    panelComments.innerHTML = `<div class="panel-empty">${t('panel.empty')}</div>`;
+    return;
+  }
+
+  const groups = {};
+  for (const c of sectionComments) {
+    const key = c.sectionTitle || t('panel.ungrouped');
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(c);
+  }
+
+  let html = '';
+  for (const [sectionTitle, items] of Object.entries(groups)) {
+    html += `<div class="panel-section">`;
+    html += `<div class="panel-section-header" onclick="togglePanelSection(this)">`;
+    html += `<span class="panel-section-chevron">▼</span>`;
+    html += `<span class="panel-section-title" title="${escapeAttr(sectionTitle)}">${escapeHtml(sectionTitle)}</span>`;
+    html += `<span class="panel-section-count">${items.length}</span>`;
+    html += `</div>`;
+    html += `<div class="panel-section-body">`;
+    for (const c of items) {
+      html += buildPanelCommentItem(c);
+    }
+    html += `</div></div>`;
+  }
+
+  panelComments.innerHTML = html;
+}
+
+function buildPanelCommentItem(c) {
+  const type = c.type || c.comment_type || 'comment';
+  const hasSelection = !!c.selectedText;
+  const emojiMap = { comment: '💬', suggestion: '💡', question: '❓', approve: '✅', reject: '❌' };
+  const emoji = emojiMap[type] || '💬';
+  const textExcerpt = c.text.length > 80 ? c.text.slice(0, 80) + '...' : c.text;
+
+  return `
+    <div class="panel-comment-item ${type}"
+         onclick="panelCommentClick('${escapeAttr(c.id)}', '${escapeAttr(c.sectionTitle || '')}', ${hasSelection})">
+      <span class="panel-comment-emoji">${emoji}</span>
+      <div class="panel-comment-body">
+        <div class="panel-comment-text">${escapeHtml(textExcerpt)}</div>
+        <div class="panel-comment-meta">${timeAgo(c.createdAt)}</div>
+      </div>
+      <button class="panel-comment-delete" onclick="event.stopPropagation();deleteComment('${c.id}')" title="Delete">🗑️</button>
+    </div>`;
+}
+
+// ── 评价功能 ─────────────────────────────────
+function renderEvaluationSection(container, planEvals) {
+  let html = '';
+  html += `<div class="panel-eval-header">${t('panel.evaluation')}</div>`;
+  html += `<div class="panel-eval-form">`;
+  html += `<div class="panel-eval-types">`;
+  html += `<button class="type-btn active" data-type="comment" title="${escapeAttr(t('commentType.comment'))}" onclick="selectEvalType(this)">💬</button>`;
+  html += `<button class="type-btn" data-type="suggestion" title="${escapeAttr(t('commentType.suggestion'))}" onclick="selectEvalType(this)">💡</button>`;
+  html += `<button class="type-btn" data-type="question" title="${escapeAttr(t('commentType.question'))}" onclick="selectEvalType(this)">❓</button>`;
+  html += `<button class="type-btn" data-type="approve" title="${escapeAttr(t('commentType.approve'))}" onclick="selectEvalType(this)">✅</button>`;
+  html += `<button class="type-btn" data-type="reject" title="${escapeAttr(t('commentType.reject'))}" onclick="selectEvalType(this)">❌</button>`;
+  html += `</div>`;
+  html += `<textarea class="panel-eval-textarea" id="evalText" placeholder="${escapeAttr(t('panel.evalPlaceholder'))}" rows="2"></textarea>`;
+  html += `<button class="panel-eval-submit" onclick="submitEvaluation()">${escapeHtml(t('comments.addCommentBtn'))}</button>`;
+  html += `</div>`;
+
+  // 已有的评价列表
+  if (planEvals.length > 0) {
+    html += `<div class="panel-eval-list">`;
+    for (const c of planEvals) {
+      const type = c.type || c.comment_type || 'comment';
+      const emojiMap = { comment: '💬', suggestion: '💡', question: '❓', approve: '✅', reject: '❌' };
+      html += `
+        <div class="panel-eval-item ${type}">
+          <span>${emojiMap[type] || '💬'}</span>
+          <div class="inline-comment-text">
+            ${escapeHtml(c.text)}
+            <div class="inline-comment-meta">${timeAgo(c.createdAt)}</div>
+          </div>
+          <div class="inline-comment-actions">
+            <button onclick="deleteComment('${c.id}')" title="Delete">🗑️</button>
+          </div>
+        </div>`;
+    }
+    html += `</div>`;
+  }
+
+  container.innerHTML = html;
+}
+
+function selectEvalType(btn) {
+  const container = btn.closest('.panel-eval-types');
+  if (!container) return;
+  container.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
+}
+
+async function submitEvaluation() {
+  const textarea = document.getElementById('evalText');
+  const text = textarea?.value.trim();
+  if (!text || !window.currentPlanId) return;
+
+  const evalTypes = document.querySelector('.panel-eval-types');
+  const type = evalTypes?.querySelector('.type-btn.active')?.dataset.type || 'comment';
+
+  await api(`/plans/${encodeURIComponent(window.currentPlanId)}/comments`, {
+    method: 'POST',
+    body: JSON.stringify({
+      text,
+      type,
+      sectionTitle: '',
+      selectedText: ''
+    })
+  });
+
+  showToast(t('panel.evalAdded'));
+  refreshCurrentPlan();
+}
+
+// ── 面板导航 ─────────────────────────────────
+function panelCommentClick(commentId, sectionTitle, hasSelection) {
+  if (hasSelection) {
+    // 尝试滚动到高亮文本，失败则回退到评论卡片
+    const mark = document.querySelector(`.text-selection-highlight[data-comment-id="${commentId}"]`);
+    if (mark) {
+      scrollToHighlight(commentId);
+    } else {
+      scrollToCommentCard(commentId);
+    }
+  } else if (sectionTitle) {
+    scrollToSection(sectionTitle);
+    // 延迟后滚动到卡片
+    setTimeout(() => scrollToCommentCard(commentId), 400);
+  } else {
+    scrollToCommentCard(commentId);
+  }
+}
+
+function togglePanelSection(headerEl) {
+  const section = headerEl.closest('.panel-section');
+  if (section) {
+    section.classList.toggle('collapsed');
+  }
+}
+
+// 评论类型选择器（内联表单 scoped）
+function selectCommentType(btn) {
+  const container = btn.closest('.inline-form-types');
+  if (!container) return;
+  container.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+// 保存自定义 CSS（CSS 编辑器模态框的保存按钮调用）
+async function saveCustomCss() {
+  const textarea = document.getElementById('cssEditorText');
+  if (!textarea) return;
+
+  const css = textarea.value;
+  await saveGlobalCustomCSS(css);
+  closeCssEditor();
+  showToast(t('styles.customCssSaved'));
 }
 
 function handleTextSelection(e) {
@@ -990,6 +1204,15 @@ export async function initApp() {
   window.handleSshContextAction = handleSshContextAction;
   window.selectCommentType = selectCommentType;
   window.setPreset = setPreset;
+  window.openCssEditor = openCssEditor;
+  window.closeCssEditor = closeCssEditor;
+  window.saveCustomCss = saveCustomCss;
+  window.toggleCommentPanel = toggleCommentPanel;
+  window.renderCommentPanel = renderCommentPanel;
+  window.selectEvalType = selectEvalType;
+  window.submitEvaluation = submitEvaluation;
+  window.panelCommentClick = panelCommentClick;
+  window.togglePanelSection = togglePanelSection;
 
   // WSL 检测（仅 Tauri 模式）
   if (window.useTauri) {
@@ -1007,6 +1230,9 @@ export async function initApp() {
     }
   }
   renderSourceTabs();
+
+  // 恢复评论面板状态
+  applyCommentPanelState();
 
   // Load plan list (single IPC call, reuse return value)
   const plans = await loadPlanList();
@@ -1075,6 +1301,13 @@ export async function initApp() {
     if (e.key === 'Escape') {
       cancelComment();
       closeSshContextMenu();
+      closeCssEditor();
+      // 关闭评论面板
+      if (commentPanelOpen) {
+        commentPanelOpen = false;
+        localStorage.setItem('commentPanelOpen', 'false');
+        applyCommentPanelState();
+      }
       document.getElementById('selectionTooltip')?.classList.remove('visible');
     }
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {

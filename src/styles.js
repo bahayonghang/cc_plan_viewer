@@ -8,7 +8,14 @@ import { t, getCurrentLang } from './i18n.js';
 const PRESETS = {
   default: {
     label: { zh: '默认', en: 'Default' },
-    css: ''
+    css: `
+      .markdown-pane { max-width: unset; margin: unset; }
+      .md-content { font-family: inherit; }
+      .md-content p { text-align: unset; }
+      .md-content blockquote { font-style: unset; }
+      .md-section { border-left-style: solid; padding-left: 32px; }
+      .comment-trigger { left: 4px; }
+    `
   },
   compact: {
     label: { zh: '紧凑', en: 'Compact' },
@@ -263,4 +270,57 @@ export function updatePresetSelector() {
     if (id === currentPreset) option.selected = true;
     selector.appendChild(option);
   }
+}
+
+// ── 自定义 CSS 编辑器 ──────────────────────────────────────
+
+/**
+ * 获取当前全局自定义 CSS 内容
+ * @returns {string} 当前自定义 CSS 文本
+ */
+export function getGlobalCustomCSS() {
+  const el = document.getElementById('global-custom-css');
+  return el ? el.textContent : '';
+}
+
+/**
+ * 保存并即时应用自定义 CSS
+ * @param {string} css - 自定义 CSS 内容
+ */
+export async function saveGlobalCustomCSS(css) {
+  // 即时注入预览
+  injectCSS('global-custom-css', sanitizeCSS(css));
+
+  // 通过 Tauri 持久化到文件
+  if (window.useTauri) {
+    try {
+      await window.__tauriInvoke('save_custom_css', { css });
+    } catch (e) {
+      console.warn('保存自定义 CSS 失败:', e);
+    }
+  }
+}
+
+/**
+ * 打开 CSS 编辑器模态框
+ */
+export function openCssEditor() {
+  const modal = document.getElementById('cssEditorModal');
+  const textarea = document.getElementById('cssEditorText');
+  if (!modal || !textarea) return;
+
+  // 加载当前自定义 CSS 内容到编辑器
+  textarea.value = getGlobalCustomCSS();
+  modal.style.display = 'flex';
+  textarea.focus();
+}
+
+/**
+ * 关闭 CSS 编辑器模态框
+ * @param {Event} [event] - 点击事件（用于判断是否点击了 overlay）
+ */
+export function closeCssEditor(event) {
+  if (event && event.target !== event.currentTarget) return;
+  const modal = document.getElementById('cssEditorModal');
+  if (modal) modal.style.display = 'none';
 }

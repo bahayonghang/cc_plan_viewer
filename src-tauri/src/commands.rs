@@ -183,3 +183,10 @@ pub async fn get_custom_css() -> Result<Option<String>, String> {
         .map(Some)
         .map_err(|e| format!("读取自定义样式失败: {}", e))
 }
+
+#[tauri::command]
+pub async fn save_custom_css(css: String) -> Result<(), String> {
+    let dir = crate::source::get_claude_dir().join("plan-viewer");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("创建目录失败: {}", e))?;
+    std::fs::write(dir.join("custom.css"), css).map_err(|e| format!("保存自定义样式失败: {}", e))
+}

@@ -32,7 +32,8 @@ fn main() {
             commands::test_ssh_connection,
             commands::disconnect_ssh,
             commands::get_ssh_connection_status,
-            commands::get_custom_css
+            commands::get_custom_css,
+            commands::save_custom_css
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

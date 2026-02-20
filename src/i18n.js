@@ -48,13 +48,26 @@ const translations = {
       approve: '通过',
       reject: '拒绝'
     },
+    panel: {
+      title: '💬 评论导航',
+      toggleTitle: '打开/关闭评论面板',
+      evaluation: '📋 整体评价',
+      evalPlaceholder: '对整个计划的评价...',
+      evalAdded: '📋 整体评价已添加',
+      empty: '暂无评论。在左侧内容中添加评论后，将在此处显示。',
+      ungrouped: '未分组评论'
+    },
     styles: {
       presetLabel: '显示风格',
       default: '默认',
       compact: '紧凑',
       spacious: '宽松',
       academic: '学术',
-      minimal: '极简'
+      minimal: '极简',
+      customCssTitle: '自定义 CSS',
+      customCssHint: '自定义 CSS 将在所有预设之上生效，可覆盖任意样式。',
+      customCssSaved: '✅ 自定义样式已保存',
+      customCssBtn: '{CSS}'
     },
     ssh: {
       addConnection: '添加 SSH 连接',
@@ -140,13 +153,26 @@ const translations = {
       approve: 'approve',
       reject: 'reject'
     },
+    panel: {
+      title: '💬 Comments',
+      toggleTitle: 'Toggle comment panel',
+      evaluation: '📋 Plan Evaluation',
+      evalPlaceholder: 'Evaluate the overall plan...',
+      evalAdded: '📋 Plan evaluation added',
+      empty: 'No comments yet. Add comments in the content area and they will appear here.',
+      ungrouped: 'Ungrouped'
+    },
     styles: {
       presetLabel: 'Display Style',
       default: 'Default',
       compact: 'Compact',
       spacious: 'Spacious',
       academic: 'Academic',
-      minimal: 'Minimal'
+      minimal: 'Minimal',
+      customCssTitle: 'Custom CSS',
+      customCssHint: 'Custom CSS overrides all presets. Changes apply immediately.',
+      customCssSaved: '✅ Custom styles saved',
+      customCssBtn: '{CSS}'
     },
     ssh: {
       addConnection: 'Add SSH Connection',
