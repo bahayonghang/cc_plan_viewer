@@ -1,6 +1,13 @@
 // Plan Viewer - Application Logic
 // Supports both Tauri (desktop) and browser modes
 
+import { t, getCurrentLang, toggleLang, applyI18n, onLangChange } from './i18n.js';
+import { initStyles, applyPlanStyles, clearPlanStyles, setPreset,
+         getPreset, getPresetList, onThemeChange, updatePresetSelector } from './styles.js';
+
+// 平台检测
+const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
+
 // Theme configuration
 const THEME_CONFIG = {
   dark: {
@@ -22,6 +29,10 @@ async function api(path, options = {}) {
 
     if (path === '/plans' && options.method !== 'POST') {
       return await invoke('get_plans', { source });
+    }
+
+    if (path === '/custom-css') {
+      return await invoke('get_custom_css');
     }
 
     if (path.startsWith('/plans/') && !path.endsWith('/comments') && options.method !== 'POST') {
@@ -94,6 +105,9 @@ function applyTheme(theme) {
   if (hljsLink) {
     hljsLink.href = THEME_CONFIG[theme].hljsUrl;
   }
+
+  // 通知样式模块主题变更
+  onThemeChange(theme);
 }
 
 // Utility functions
@@ -109,10 +123,10 @@ function timeAgo(dateStr) {
   const d = new Date(dateStr);
   const now = new Date();
   const diff = (now - d) / 1000;
-  if (diff < 60) return 'just now';
-  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
-  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
-  return Math.floor(diff / 86400) + 'd ago';
+  if (diff < 60) return t('time.justNow');
+  if (diff < 3600) return Math.floor(diff / 60) + ' ' + t('time.minutesAgo');
+  if (diff < 86400) return Math.floor(diff / 3600) + ' ' + t('time.hoursAgo');
+  return Math.floor(diff / 86400) + ' ' + t('time.daysAgo');
 }
 
 function showToast(msg) {
@@ -124,42 +138,378 @@ function showToast(msg) {
   }
 }
 
-// Source switcher for WSL integration
-function renderSourceSwitcher() {
-  const el = document.getElementById('sourceSwitcher');
-  if (!el || !window.useTauri || !window.wslInfo?.available) {
+// Source tabs for Windows/WSL/SSH integration
+function renderSourceTabs() {
+  // 隐藏旧的 select 切换器
+  const oldSwitcher = document.getElementById('sourceSwitcher');
+  if (oldSwitcher) oldSwitcher.style.display = 'none';
+
+  const el = document.getElementById('sourceTabs');
+  if (!el || !window.useTauri) {
     if (el) el.style.display = 'none';
     return;
   }
-  const opts = [
-    { value: 'windows', label: '🪟 Windows' },
-    ...window.wslInfo.distributions.map(d => ({
-      value: `wsl:${d}`, label: `🐧 WSL: ${d}`
-    }))
+
+  // 构建 tab 列表
+  const tabs = [
+    { value: 'windows', label: '🪟 Windows', icon: '🪟' }
   ];
-  el.innerHTML = `<select id="sourceSelect" onchange="switchSource(this.value)">
-    ${opts.map(o => `<option value="${o.value}" ${o.value === window.currentSource ? 'selected' : ''}>${o.label}</option>`).join('')}
-  </select>`;
-  el.style.display = 'block';
+
+  // WSL tabs
+  if (window.wslInfo?.available) {
+    for (const d of window.wslInfo.distributions) {
+      tabs.push({ value: `wsl:${d}`, label: `🐧 ${d}`, icon: '🐧' });
+    }
+  }
+
+  // SSH tabs
+  for (const cfg of (window.sshConfigs || [])) {
+    const status = window.sshConnectionStatus[cfg.id];
+    const statusClass = status === 'connected' ? 'connected' : (status === 'connecting' ? 'connecting' : '');
+    tabs.push({
+      value: `ssh:${cfg.id}`,
+      label: `🖥️ ${cfg.name}`,
+      icon: '🖥️',
+      ssh: true,
+      configId: cfg.id,
+      statusClass
+    });
+  }
+
+  el.innerHTML = tabs.map(t => `
+    <button class="source-tab ${t.value === window.currentSource ? 'active' : ''} ${t.statusClass || ''}"
+      data-source="${t.value}"
+      onclick="switchSource('${escapeAttr(t.value)}')"
+      oncontextmenu="${t.ssh ? `event.preventDefault();openSshTabContextMenu(event, '${escapeAttr(t.configId)}')` : ''}"
+      title="${escapeAttr(t.label)}">
+      ${t.ssh ? `<span class="ssh-status-dot ${t.statusClass}"></span>` : ''}
+      <span class="source-tab-label">${escapeHtml(t.label)}</span>
+    </button>
+  `).join('') + `
+    <button class="source-tab add-tab" onclick="openSshConfigModal()" title="${escapeAttr(t('ssh.addConnection'))}">
+      <span>+</span>
+    </button>
+  `;
+
+  el.style.display = 'flex';
 }
 
 async function switchSource(src) {
+  // SSH 来源：尝试连接
+  if (src.startsWith('ssh:')) {
+    const configId = src.slice(4);
+    const cfg = window.sshConfigs.find(c => c.id === configId);
+    if (!cfg) return;
+
+    // 检查是否已连接
+    const invoke = window.__tauriInvoke;
+    try {
+      const connected = await invoke('get_ssh_connection_status', { configId });
+      if (!connected) {
+        // 显示连接中状态
+        window.sshConnectionStatus[configId] = 'connecting';
+        renderSourceTabs();
+        showToast(t('ssh.connecting') + ' ' + cfg.name + '...');
+
+        // 测试连接（会自动建立连接）
+        const result = await invoke('test_ssh_connection', { configData: cfg });
+        if (!result.success) {
+          window.sshConnectionStatus[configId] = 'disconnected';
+          renderSourceTabs();
+          showToast(t('ssh.connectFailed') + ': ' + result.message);
+          return;
+        }
+        window.sshConnectionStatus[configId] = 'connected';
+        showToast(t('ssh.connected') + ' ' + cfg.name);
+      }
+    } catch (e) {
+      window.sshConnectionStatus[configId] = 'disconnected';
+      renderSourceTabs();
+      showToast(t('ssh.connectFailed') + ': ' + e);
+      return;
+    }
+  }
+
   window.currentSource = src;
   window.currentPlanId = null;
   window.currentPlan = null;
   document.getElementById('planView').style.display = 'none';
   document.getElementById('emptyState').style.display = '';
+  renderSourceTabs();
   const plans = await loadPlanList();
   if (plans?.length > 0) loadPlan(plans[0].id);
 }
 
+// ── SSH Configuration Modal ─────────────────────────────────
+
+function openSshConfigModal(configId) {
+  const modal = document.getElementById('sshModal');
+  const title = document.getElementById('sshModalTitle');
+  const testResult = document.getElementById('sshTestResult');
+  testResult.style.display = 'none';
+
+  if (configId) {
+    // 编辑模式
+    const cfg = window.sshConfigs.find(c => c.id === configId);
+    if (!cfg) return;
+    title.textContent = t('ssh.editConnection');
+    document.getElementById('sshConfigId').value = cfg.id;
+    document.getElementById('sshName').value = cfg.name;
+    document.getElementById('sshHost').value = cfg.host;
+    document.getElementById('sshPort').value = cfg.port;
+    document.getElementById('sshUsername').value = cfg.username;
+    document.getElementById('sshRemoteDir').value = cfg.remote_claude_dir || '~/.claude';
+
+    if (cfg.auth_method.type === 'Key') {
+      document.getElementById('sshAuthMethod').value = 'Key';
+      document.getElementById('sshKeyPath').value = cfg.auth_method.private_key_path || '';
+      document.getElementById('sshPassphrase').value = cfg.auth_method.passphrase || '';
+    } else {
+      document.getElementById('sshAuthMethod').value = 'Password';
+      document.getElementById('sshPassword').value = cfg.auth_method.password || '';
+    }
+  } else {
+    // 新建模式
+    title.textContent = t('ssh.addConnection');
+    document.getElementById('sshConfigId').value = '';
+    document.getElementById('sshName').value = '';
+    document.getElementById('sshHost').value = '';
+    document.getElementById('sshPort').value = '22';
+    document.getElementById('sshUsername').value = '';
+    document.getElementById('sshAuthMethod').value = 'Key';
+    document.getElementById('sshKeyPath').value = '';
+    document.getElementById('sshPassphrase').value = '';
+    document.getElementById('sshPassword').value = '';
+    document.getElementById('sshRemoteDir').value = '~/.claude';
+  }
+
+  toggleAuthFields();
+  modal.style.display = 'flex';
+}
+
+function closeSshModal(event) {
+  if (event && event.target !== event.currentTarget) return;
+  document.getElementById('sshModal').style.display = 'none';
+}
+
+function toggleAuthFields() {
+  const method = document.getElementById('sshAuthMethod').value;
+  document.getElementById('sshKeyGroup').style.display = method === 'Key' ? '' : 'none';
+  document.getElementById('sshPassphraseGroup').style.display = method === 'Key' ? '' : 'none';
+  document.getElementById('sshPasswordGroup').style.display = method === 'Password' ? '' : 'none';
+}
+
+async function saveSshConfig() {
+  const id = document.getElementById('sshConfigId').value;
+  const name = document.getElementById('sshName').value.trim();
+  const host = document.getElementById('sshHost').value.trim();
+  const port = parseInt(document.getElementById('sshPort').value) || 22;
+  const username = document.getElementById('sshUsername').value.trim();
+  const remoteDir = document.getElementById('sshRemoteDir').value.trim() || '~/.claude';
+  const authMethod = document.getElementById('sshAuthMethod').value;
+
+  if (!name || !host || !username) {
+    showToast(t('ssh.fillRequired'));
+    return;
+  }
+
+  let auth_method;
+  if (authMethod === 'Key') {
+    const keyPath = document.getElementById('sshKeyPath').value.trim();
+    if (!keyPath) {
+      showToast(t('ssh.fillKeyPath'));
+      return;
+    }
+    const passphrase = document.getElementById('sshPassphrase').value || null;
+    auth_method = { type: 'Key', private_key_path: keyPath, passphrase };
+  } else {
+    const password = document.getElementById('sshPassword').value;
+    if (!password) {
+      showToast(t('ssh.fillPassword'));
+      return;
+    }
+    auth_method = { type: 'Password', password };
+  }
+
+  const configData = {
+    id: id || '',
+    name,
+    host,
+    port,
+    username,
+    auth_method,
+    remote_claude_dir: remoteDir,
+    created_at: '',
+    last_connected: null
+  };
+
+  try {
+    const invoke = window.__tauriInvoke;
+    const saved = await invoke('save_ssh_config_command', { configData });
+    // 更新本地状态
+    const idx = window.sshConfigs.findIndex(c => c.id === saved.id);
+    if (idx >= 0) {
+      window.sshConfigs[idx] = saved;
+    } else {
+      window.sshConfigs.push(saved);
+    }
+    renderSourceTabs();
+    closeSshModal();
+    showToast(t('ssh.configSaved'));
+  } catch (e) {
+    showToast(t('ssh.saveFailed') + ': ' + e);
+  }
+}
+
+async function deleteSshConfig(configId) {
+  if (!confirm(t('ssh.deleteConfirm'))) return;
+
+  try {
+    const invoke = window.__tauriInvoke;
+    await invoke('delete_ssh_config_command', { configId });
+    window.sshConfigs = window.sshConfigs.filter(c => c.id !== configId);
+    delete window.sshConnectionStatus[configId];
+
+    // 如果当前来源是被删除的 SSH，切回 Windows
+    if (window.currentSource === `ssh:${configId}`) {
+      await switchSource('windows');
+    } else {
+      renderSourceTabs();
+    }
+    showToast(t('ssh.configDeleted'));
+  } catch (e) {
+    showToast(t('ssh.deleteFailed') + ': ' + e);
+  }
+}
+
+async function testSshConnection() {
+  const resultEl = document.getElementById('sshTestResult');
+  resultEl.style.display = 'block';
+  resultEl.className = 'ssh-test-result';
+  resultEl.textContent = t('ssh.testing');
+
+  // 构建临时配置用于测试
+  const id = document.getElementById('sshConfigId').value || 'test-' + Date.now();
+  const authMethod = document.getElementById('sshAuthMethod').value;
+  let auth_method;
+  if (authMethod === 'Key') {
+    auth_method = {
+      type: 'Key',
+      private_key_path: document.getElementById('sshKeyPath').value.trim(),
+      passphrase: document.getElementById('sshPassphrase').value || null
+    };
+  } else {
+    auth_method = {
+      type: 'Password',
+      password: document.getElementById('sshPassword').value
+    };
+  }
+
+  const configData = {
+    id,
+    name: document.getElementById('sshName').value.trim() || 'test',
+    host: document.getElementById('sshHost').value.trim(),
+    port: parseInt(document.getElementById('sshPort').value) || 22,
+    username: document.getElementById('sshUsername').value.trim(),
+    auth_method,
+    remote_claude_dir: document.getElementById('sshRemoteDir').value.trim() || '~/.claude',
+    created_at: '',
+    last_connected: null
+  };
+
+  if (!configData.host || !configData.username) {
+    resultEl.className = 'ssh-test-result error';
+    resultEl.textContent = t('ssh.fillHostUser');
+    return;
+  }
+
+  try {
+    const invoke = window.__tauriInvoke;
+    const result = await invoke('test_ssh_connection', { configData });
+    if (result.success) {
+      resultEl.className = 'ssh-test-result success';
+      resultEl.textContent = '✅ ' + result.message;
+      // 测试成功后断开（避免占用连接）
+      await invoke('disconnect_ssh', { configId: id }).catch(() => {});
+    } else {
+      resultEl.className = 'ssh-test-result error';
+      resultEl.textContent = '❌ ' + result.message;
+    }
+  } catch (e) {
+    resultEl.className = 'ssh-test-result error';
+    resultEl.textContent = t('ssh.testFailed') + ': ' + e;
+  }
+}
+
+function openSshTabContextMenu(event, configId) {
+  event.preventDefault();
+  event.stopPropagation();
+
+  const menu = document.getElementById('sshContextMenu');
+  menu.style.display = 'block';
+  menu.style.left = event.clientX + 'px';
+  menu.style.top = event.clientY + 'px';
+  menu.dataset.configId = configId;
+
+  // 根据连接状态显示/隐藏断开按钮
+  const disconnectBtn = menu.querySelector('[data-action="disconnect"]');
+  const isConnected = window.sshConnectionStatus[configId] === 'connected';
+  disconnectBtn.style.display = isConnected ? '' : 'none';
+}
+
+function closeSshContextMenu() {
+  const menu = document.getElementById('sshContextMenu');
+  menu.style.display = 'none';
+}
+
+async function handleSshContextAction(action, configId) {
+  closeSshContextMenu();
+
+  switch (action) {
+    case 'edit':
+      openSshConfigModal(configId);
+      break;
+    case 'disconnect': {
+      try {
+        const invoke = window.__tauriInvoke;
+        await invoke('disconnect_ssh', { configId });
+        window.sshConnectionStatus[configId] = 'disconnected';
+        renderSourceTabs();
+        showToast(t('ssh.disconnected'));
+        // 如果当前来源是该 SSH，切回 Windows
+        if (window.currentSource === `ssh:${configId}`) {
+          await switchSource('windows');
+        }
+      } catch (e) {
+        showToast(t('ssh.disconnectFailed') + ': ' + e);
+      }
+      break;
+    }
+    case 'delete':
+      await deleteSshConfig(configId);
+      break;
+  }
+}
+
 // Render plan list
 async function loadPlanList() {
-  const plans = await api('/plans');
   const listEl = document.getElementById('planList');
 
+  // SSH 来源显示加载指示器
+  if (window.currentSource?.startsWith('ssh:')) {
+    listEl.innerHTML = '<div class="plan-list-loading">' + t('sidebar.loadingRemote') + '</div>';
+  }
+
+  let plans;
+  try {
+    plans = await api('/plans');
+  } catch (e) {
+    listEl.innerHTML = `<div style="padding:20px;color:var(--accent-red);font-size:0.85rem;">❌ ${t('sidebar.loadError')}: ${escapeHtml(String(e))}</div>`;
+    return null;
+  }
+
   if (!plans || plans.length === 0) {
-    listEl.innerHTML = '<div style="padding:20px;color:var(--text-muted);font-size:0.85rem;">No plans yet. Switch Claude Code to plan mode to see plans here.</div>';
+    listEl.innerHTML = '<div style="padding:20px;color:var(--text-muted);font-size:0.85rem;">' + t('sidebar.empty') + '</div>';
     return plans;
   }
 
@@ -190,6 +540,9 @@ async function loadPlan(planId) {
   if (!plan) return;
   window.currentPlan = plan;
 
+  // 应用计划内嵌 CSS
+  applyPlanStyles(plan.content);
+
   // Show plan view, hide empty state
   document.getElementById('emptyState').style.display = 'none';
   const planView = document.getElementById('planView');
@@ -197,13 +550,10 @@ async function loadPlan(planId) {
 
   // Update toolbar
   document.getElementById('planFileName').textContent = plan.name;
-  document.getElementById('planModified').textContent = `Modified: ${new Date(plan.modified).toLocaleString()}`;
+  document.getElementById('planModified').textContent = `${t('toolbar.modified')}: ${new Date(plan.modified).toLocaleString()}`;
 
-  // Render markdown with section wrappers
+  // Render markdown with section wrappers and inline comments
   renderMarkdown(plan.content, plan.comments);
-
-  // Render comments pane
-  renderComments(plan.comments);
 
   // Update sidebar active state (lightweight DOM update, no IPC)
   updateSidebarActiveState(planId);
@@ -275,11 +625,37 @@ function renderMarkdown(content, comments) {
     if (sec.title) {
       finalHtml += `<span class="comment-trigger ${hasComments ? 'has-comments' : ''}"
         onclick="openCommentForm(this, '${escapeAttr(sec.title)}')"
-        title="${hasComments ? count + ' comment(s)' : 'Add comment'}">
+        title="${hasComments ? count + ' ' + t('comments.commentCount') : t('comments.addComment')}">
         ${hasComments ? count : '+'}
       </span>`;
     }
     finalHtml += sec.elements.join('');
+
+    // 注入该 section 的内联评论卡片
+    const sectionComments = commentsBySection[sec.title] || [];
+    if (sectionComments.length > 0) {
+      finalHtml += '<div class="section-comments">';
+      for (const c of sectionComments) {
+        const type = c.type || c.comment_type || 'comment';
+        const hasSelection = !!c.selectedText;
+        const selectionExcerpt = hasSelection
+          ? (c.selectedText.length > 60 ? c.selectedText.slice(0, 60) + '...' : c.selectedText)
+          : '';
+        finalHtml += `
+          <div class="inline-comment-card ${type}" id="card-${c.id}">
+            <div class="inline-comment-text">
+              ${hasSelection ? `<div class="inline-form-context">"${escapeHtml(selectionExcerpt)}"</div>` : ''}
+              ${escapeHtml(c.text)}
+              <div class="inline-comment-meta">${timeAgo(c.created_at)}</div>
+            </div>
+            <div class="inline-comment-actions">
+              <button onclick="deleteComment('${c.id}')" title="Delete">🗑️</button>
+            </div>
+          </div>`;
+      }
+      finalHtml += '</div>';
+    }
+
     finalHtml += '</div>';
   }
 
@@ -421,70 +797,54 @@ function scrollToCommentCard(commentId) {
   }
 }
 
-// Render comments pane
-function renderComments(comments) {
-  const header = document.getElementById('commentsPaneHeader');
-  const list = document.getElementById('commentsList');
-
-  const all = comments || [];
-  header.textContent = `Comments (${all.length})`;
-
-  if (all.length === 0) {
-    list.innerHTML = '<div style="color:var(--text-muted);font-size:0.85rem;padding:12px;">No comments yet. Click the + button next to any section, or select text to add a review comment.</div>';
-    return;
-  }
-
-  list.innerHTML = all.map(c => {
-    const hasSelection = !!c.selectedText;
-    const selectionExcerpt = hasSelection ? (c.selectedText.length > 60 ? c.selectedText.slice(0, 60) + '...' : c.selectedText) : '';
-    let contextHtml = '';
-    if (hasSelection) {
-      contextHtml = `<div class="comment-card-context">"${escapeHtml(selectionExcerpt)}"</div>`;
-    } else if (c.sectionTitle) {
-      contextHtml = `<div class="comment-card-context">Section: ${escapeHtml(c.sectionTitle)}</div>`;
-    }
-    return `
-    <div class="comment-card" id="card-${c.id}">
-      <button class="comment-card-delete" onclick="deleteComment('${c.id}')" title="Delete comment">✕</button>
-      <div class="comment-card-header">
-        <span class="comment-type-badge ${c.type || c.comment_type}">${c.type || c.comment_type}</span>
-      </div>
-      ${contextHtml}
-      <div class="comment-card-text">${escapeHtml(c.text)}</div>
-      <div class="comment-card-time">${timeAgo(c.created_at)}</div>
-      <div class="comment-card-actions">
-        ${hasSelection
-          ? `<button onclick="scrollToHighlight('${c.id}')">↗ Go to highlight</button>`
-          : (c.sectionTitle ? `<button onclick="scrollToSection('${escapeAttr(c.sectionTitle)}')">↗ Go to section</button>` : '')
-        }
-      </div>
-    </div>`;
-  }).join('');
+// Comment form functions
+function closeAllInlineForms() {
+  document.querySelectorAll('.inline-comment-form').forEach(f => f.remove());
 }
 
-// Comment form functions
 function openCommentForm(trigger, sectionTitle, selectedText) {
-  const contextEl = document.getElementById('globalCommentContext');
-  const textarea = document.getElementById('globalCommentText');
-
-  if (selectedText) {
-    const excerpt = selectedText.length > 80 ? selectedText.slice(0, 80) + '...' : selectedText;
-    contextEl.textContent = `📝 "${excerpt}"`;
-  } else {
-    contextEl.textContent = `📌 Section: ${sectionTitle}`;
-  }
-  contextEl.classList.add('visible');
+  closeAllInlineForms();
+  const section = document.querySelector(`.md-section[data-section="${CSS.escape(sectionTitle)}"]`);
+  if (!section) return;
 
   window.commentFormContext = { sectionTitle, selectedText: selectedText || '' };
-  textarea.focus();
+
+  // 构建上下文提示
+  let contextHtml = '';
+  if (selectedText) {
+    const excerpt = selectedText.length > 80 ? selectedText.slice(0, 80) + '...' : selectedText;
+    contextHtml = `<div class="inline-form-context">📝 "${escapeHtml(excerpt)}"</div>`;
+  }
+
+  const placeholderText = t('comments.leaveComment');
+  const cancelText = t('comments.cancel');
+  const submitText = t('comments.addCommentBtn');
+
+  const formHtml = `
+    <div class="inline-comment-form" id="inlineCommentFormWrapper">
+      ${contextHtml}
+      <textarea id="inlineCommentText" placeholder="${escapeAttr(placeholderText)}" rows="2"></textarea>
+      <div class="inline-form-row">
+        <div class="inline-form-types">
+          <button class="type-btn active" data-type="comment" title="${escapeAttr(t('commentType.comment'))}" onclick="selectCommentType(this)">💬</button>
+          <button class="type-btn" data-type="suggestion" title="${escapeAttr(t('commentType.suggestion'))}" onclick="selectCommentType(this)">💡</button>
+          <button class="type-btn" data-type="question" title="${escapeAttr(t('commentType.question'))}" onclick="selectCommentType(this)">❓</button>
+          <button class="type-btn" data-type="approve" title="${escapeAttr(t('commentType.approve'))}" onclick="selectCommentType(this)">✅</button>
+          <button class="type-btn" data-type="reject" title="${escapeAttr(t('commentType.reject'))}" onclick="selectCommentType(this)">❌</button>
+        </div>
+        <div class="inline-form-actions">
+          <button class="toolbar-btn" onclick="closeAllInlineForms()">${escapeHtml(cancelText)}</button>
+          <button class="toolbar-btn primary" onclick="submitInlineComment()">${escapeHtml(submitText)}</button>
+        </div>
+      </div>
+    </div>`;
+
+  section.insertAdjacentHTML('beforeend', formHtml);
+  document.getElementById('inlineCommentText')?.focus();
 }
 
 function cancelComment() {
-  const contextEl = document.getElementById('globalCommentContext');
-  const textarea = document.getElementById('globalCommentText');
-  contextEl.classList.remove('visible');
-  contextEl.textContent = '';
-  textarea.value = '';
+  closeAllInlineForms();
   window.commentFormContext = {};
 }
 
@@ -496,28 +856,28 @@ async function deleteComment(commentId) {
   refreshCurrentPlan();
 }
 
-async function submitGlobalComment() {
-  const textarea = document.getElementById('globalCommentText');
-  const text = textarea.value.trim();
+async function submitInlineComment() {
+  const textarea = document.getElementById('inlineCommentText');
+  const text = textarea?.value.trim();
   if (!text || !window.currentPlanId) return;
+
+  const formWrapper = document.getElementById('inlineCommentFormWrapper');
+  const type = formWrapper?.querySelector('.type-btn.active')?.dataset.type || 'comment';
 
   await api(`/plans/${encodeURIComponent(window.currentPlanId)}/comments`, {
     method: 'POST',
     body: JSON.stringify({
       text,
-      type: 'comment',
+      type,
       sectionTitle: window.commentFormContext.sectionTitle || '',
       selectedText: window.commentFormContext.selectedText || ''
     })
   });
 
-  textarea.value = '';
-  const contextEl = document.getElementById('globalCommentContext');
-  contextEl.classList.remove('visible');
-  contextEl.textContent = '';
+  closeAllInlineForms();
   window.commentFormContext = {};
 
-  showToast('💬 Comment added & written to plan file');
+  showToast(t('comments.added'));
   refreshCurrentPlan();
 }
 
@@ -545,6 +905,12 @@ function scrollToHighlight(commentId) {
 
 // Text selection handling
 let pendingSelectionText = '';
+
+// 评论类型选择器
+function selectCommentType(btn) {
+  document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
 
 function handleTextSelection(e) {
   const tooltip = document.getElementById('selectionTooltip');
@@ -588,17 +954,42 @@ export async function initApp() {
   // Apply saved theme
   applyTheme(localStorage.getItem('theme') || 'dark');
 
+  // 初始化样式注入系统
+  await initStyles();
+
+  // 注册语言切换回调 - 重渲染动态内容
+  onLangChange(() => {
+    if (window.currentPlan) {
+      renderMarkdown(window.currentPlan.content, window.currentPlan.comments);
+    }
+    loadPlanList();
+    renderSourceTabs();
+    updatePresetSelector();
+  });
+
   // Make functions globally available
   window.toggleTheme = toggleTheme;
   window.loadPlan = loadPlan;
   window.refreshCurrentPlan = refreshCurrentPlan;
   window.openCommentForm = openCommentForm;
   window.cancelComment = cancelComment;
-  window.submitGlobalComment = submitGlobalComment;
+  window.submitInlineComment = submitInlineComment;
+  window.closeAllInlineForms = closeAllInlineForms;
   window.deleteComment = deleteComment;
   window.scrollToSection = scrollToSection;
   window.scrollToHighlight = scrollToHighlight;
   window.switchSource = switchSource;
+  window.openSshConfigModal = openSshConfigModal;
+  window.closeSshModal = closeSshModal;
+  window.toggleAuthFields = toggleAuthFields;
+  window.saveSshConfig = saveSshConfig;
+  window.deleteSshConfig = deleteSshConfig;
+  window.testSshConnection = testSshConnection;
+  window.openSshTabContextMenu = openSshTabContextMenu;
+  window.closeSshContextMenu = closeSshContextMenu;
+  window.handleSshContextAction = handleSshContextAction;
+  window.selectCommentType = selectCommentType;
+  window.setPreset = setPreset;
 
   // WSL 检测（仅 Tauri 模式）
   if (window.useTauri) {
@@ -607,8 +998,15 @@ export async function initApp() {
     } catch (e) {
       console.warn('WSL 检测失败:', e);
     }
+    // 加载 SSH 配置
+    try {
+      window.sshConfigs = await window.__tauriInvoke('get_ssh_configs');
+    } catch (e) {
+      console.warn('SSH 配置加载失败:', e);
+      window.sshConfigs = [];
+    }
   }
-  renderSourceSwitcher();
+  renderSourceTabs();
 
   // Load plan list (single IPC call, reuse return value)
   const plans = await loadPlanList();
@@ -626,9 +1024,9 @@ export async function initApp() {
     svgEl.style.cssText = 'width: 64px; height: 64px; opacity: 0.3;';
     svgEl.innerHTML = '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>';
     const h3 = document.createElement('h3');
-    h3.textContent = 'Select a plan to review';
+    h3.textContent = t('emptyState.title');
     const p = emptyState.querySelector('p');
-    if (p) p.textContent = 'Choose a plan from the sidebar, or wait for Claude Code to generate one.';
+    if (p) p.textContent = t('emptyState.desc');
     emptyState.insertBefore(h3, p);
     emptyState.insertBefore(svgEl, h3);
   }
@@ -637,6 +1035,9 @@ export async function initApp() {
   if (plans && plans.length > 0) {
     loadPlan(plans[0].id);
   }
+
+  // 再次应用 i18n（确保动态生成的元素也被翻译）
+  applyI18n();
 
   // Set up text selection handler
   const markdownPane = document.getElementById('markdownPane');
@@ -673,11 +1074,25 @@ export async function initApp() {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       cancelComment();
+      closeSshContextMenu();
       document.getElementById('selectionTooltip')?.classList.remove('visible');
     }
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-      if (document.activeElement === document.getElementById('globalCommentText')) {
-        submitGlobalComment();
+      if (document.activeElement === document.getElementById('inlineCommentText')) {
+        submitInlineComment();
+      }
+    }
+  });
+
+  // Context menu: close on click outside, delegate actions
+  document.addEventListener('click', (e) => {
+    const menu = document.getElementById('sshContextMenu');
+    if (menu && menu.style.display !== 'none') {
+      const item = e.target.closest('.context-menu-item');
+      if (item && item.dataset.action) {
+        handleSshContextAction(item.dataset.action, menu.dataset.configId);
+      } else if (!menu.contains(e.target)) {
+        closeSshContextMenu();
       }
     }
   });

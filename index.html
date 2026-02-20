@@ -25,8 +25,11 @@
       Plan Viewer
     </div>
     <div class="topbar-status">
+      <div class="lang-switch" id="langToggle" onclick="toggleLang()" title="切换语言 / Switch Language">
+        <span id="langLabel">EN</span>
+      </div>
       <div class="theme-switch">
-        <span class="theme-switch-label">Dark</span>
+        <span class="theme-switch-label" data-i18n="theme.dark">暗色</span>
         <div class="theme-switch-track" id="themeToggle" onclick="toggleTheme()" title="Toggle light/dark theme">
           <div class="theme-switch-thumb" id="themeThumb">
             <svg id="themeIconSun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -41,7 +44,7 @@
             </svg>
           </div>
         </div>
-        <span class="theme-switch-label">Light</span>
+        <span class="theme-switch-label" data-i18n="theme.light">亮色</span>
       </div>
       <span id="statusText" style="font-family: var(--font-sans); font-size: 0.78rem;"></span>
     </div>
@@ -51,8 +54,9 @@
   <div class="main-layout">
     <!-- SIDEBAR -->
     <div class="sidebar">
-      <div class="sidebar-header">📋 Plans</div>
+      <div class="sidebar-header" data-i18n="sidebar.plans">📋 计划列表</div>
       <div id="sourceSwitcher" style="display:none;padding:0 12px 8px;"></div>
+      <div id="sourceTabs" class="source-tabs" style="display:none;"></div>
       <div class="plan-list" id="planList">
         <div class="empty-state" style="padding: 20px;">
           <p>Loading plans...</p>
@@ -73,23 +77,12 @@
           <span class="toolbar-info" id="planFileName"></span>
           <span class="toolbar-info" id="planModified"></span>
           <div class="toolbar-spacer"></div>
-          <button class="toolbar-btn" onclick="refreshCurrentPlan()">⟳ Refresh</button>
+          <select class="preset-selector" id="presetSelector" onchange="setPreset(this.value)" data-i18n-title="styles.presetLabel"></select>
+          <button class="toolbar-btn" onclick="refreshCurrentPlan()" data-i18n="toolbar.refresh">⟳ 刷新</button>
         </div>
         <div class="split-view">
           <div class="markdown-pane" id="markdownPane">
             <div class="md-content" id="mdContent"></div>
-          </div>
-          <div class="comments-pane" id="commentsPane">
-            <div class="comments-pane-header" id="commentsPaneHeader">Comments (0)</div>
-            <div class="global-comment-input">
-              <div id="globalCommentContext"></div>
-              <textarea id="globalCommentText" placeholder="Add a comment... (⌘+Enter to submit)" rows="4"></textarea>
-              <div class="global-comment-actions">
-                <button class="toolbar-btn" onclick="cancelComment()">Cancel</button>
-                <button class="toolbar-btn primary" onclick="submitGlobalComment()">Submit</button>
-              </div>
-            </div>
-            <div id="commentsList"></div>
           </div>
         </div>
       </div>
@@ -97,10 +90,79 @@
   </div>
 
   <!-- SELECTION TOOLTIP -->
-  <div class="selection-tooltip" id="selectionTooltip">💬 Comment on selection</div>
+  <div class="selection-tooltip" id="selectionTooltip" data-i18n="comments.selectionTooltip">💬 评论选中文字</div>
+
+  <!-- SSH TAB CONTEXT MENU -->
+  <div class="context-menu" id="sshContextMenu" style="display:none;">
+    <button class="context-menu-item" data-action="edit" data-i18n="ssh.editConfig">✏️ 编辑配置</button>
+    <button class="context-menu-item" data-action="disconnect" data-i18n="ssh.disconnect">🔌 断开连接</button>
+    <div class="context-menu-divider"></div>
+    <button class="context-menu-item danger" data-action="delete" data-i18n="ssh.delete">🗑️ 删除</button>
+  </div>
 
   <!-- TOAST -->
   <div class="toast" id="toast"></div>
+
+  <!-- SSH CONFIG MODAL -->
+  <div class="modal-overlay" id="sshModal" style="display:none;" onclick="closeSshModal(event)">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3 id="sshModalTitle">添加 SSH 连接</h3>
+        <button class="modal-close" onclick="closeSshModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="sshConfigId" value="">
+        <div class="form-group">
+          <label data-i18n="ssh.displayName">显示名称</label>
+          <input type="text" id="sshName" placeholder="My Server">
+        </div>
+        <div class="form-group">
+          <label data-i18n="ssh.host">主机</label>
+          <input type="text" id="sshHost" placeholder="192.168.1.100 / example.com">
+        </div>
+        <div class="form-group form-row">
+          <div class="form-group" style="flex:1">
+            <label data-i18n="ssh.username">用户名</label>
+            <input type="text" id="sshUsername" placeholder="root">
+          </div>
+          <div class="form-group" style="width:100px">
+            <label data-i18n="ssh.port">端口</label>
+            <input type="number" id="sshPort" value="22" min="1" max="65535">
+          </div>
+        </div>
+        <div class="form-group">
+          <label data-i18n="ssh.authMethod">认证方式</label>
+          <select id="sshAuthMethod" onchange="toggleAuthFields()">
+            <option value="Key" data-i18n="ssh.keyFile">密钥文件</option>
+            <option value="Password" data-i18n="ssh.password">密码</option>
+          </select>
+        </div>
+        <div class="form-group" id="sshKeyGroup">
+          <label data-i18n="ssh.privateKeyPath">私钥路径</label>
+          <input type="text" id="sshKeyPath" placeholder="C:\Users\you\.ssh\id_rsa">
+        </div>
+        <div class="form-group" id="sshPassphraseGroup">
+          <label data-i18n="ssh.keyPassphrase">密钥密码 (可选)</label>
+          <input type="password" id="sshPassphrase">
+        </div>
+        <div class="form-group" id="sshPasswordGroup" style="display:none">
+          <label data-i18n="ssh.password">密码</label>
+          <input type="password" id="sshPassword">
+        </div>
+        <div class="form-group">
+          <label data-i18n="ssh.remoteClaude">远程 .claude 目录</label>
+          <input type="text" id="sshRemoteDir" value="~/.claude" placeholder="~/.claude">
+        </div>
+        <div class="ssh-test-result" id="sshTestResult" style="display:none"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="toolbar-btn" id="sshTestBtn" onclick="testSshConnection()" data-i18n="ssh.testConnection">🔌 测试连接</button>
+        <div class="toolbar-spacer"></div>
+        <button class="toolbar-btn" onclick="closeSshModal()" data-i18n="ssh.cancel">取消</button>
+        <button class="toolbar-btn primary" onclick="saveSshConfig()" data-i18n="ssh.save">保存</button>
+      </div>
+    </div>
+  </div>
 
   <script type="module" src="/src/main.js"></script>
 </body>
