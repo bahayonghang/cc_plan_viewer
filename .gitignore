@@ -34,3 +34,5 @@ build/
 .omc/
 .claude/
 .antigravityignore
+
+outputs/
