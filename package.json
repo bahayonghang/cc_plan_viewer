@@ -1,6 +1,6 @@
 {
   "name": "plan-viewer",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "A desktop viewer for Claude Code plans",
   "type": "module",
   "scripts": {
