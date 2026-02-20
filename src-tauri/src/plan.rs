@@ -11,17 +11,20 @@ use uuid::Uuid;
 // ── Data Structures ─────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PlanInfo {
     pub id: String,
     pub name: String,
     pub path: String,
     pub modified: String,
     pub size: u64,
+    #[serde(alias = "comment_count")]
     pub comment_count: usize,
     pub source: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Plan {
     pub id: String,
     pub name: String,
@@ -32,17 +35,24 @@ pub struct Plan {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Comment {
     pub id: String,
+    #[serde(alias = "plan_id")]
     pub plan_id: String,
+    #[serde(alias = "line_number")]
     pub line_number: Option<usize>,
+    #[serde(alias = "line_content")]
     pub line_content: String,
+    #[serde(alias = "section_title")]
     pub section_title: String,
+    #[serde(alias = "selected_text")]
     pub selected_text: String,
     pub text: String,
-    #[serde(rename = "type")]
+    #[serde(rename = "type", alias = "comment_type")]
     pub comment_type: String,
     pub status: String,
+    #[serde(alias = "created_at")]
     pub created_at: String,
 }
 
