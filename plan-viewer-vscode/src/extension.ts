@@ -67,12 +67,12 @@ export function activate(context: vscode.ExtensionContext) {
       await treeProvider.toggleGrouping();
     }),
 
-    // 展开所有项目组
-    vscode.commands.registerCommand('planViewer.expandAll', () => {
-      treeProvider.expandAll();
+    // 展开所有项目组（通过 treeView.reveal 强制展开，绕过 VSCode 内部状态缓存）
+    vscode.commands.registerCommand('planViewer.expandAll', async () => {
+      await treeProvider.expandAll(treeView);
     }),
 
-    // 折叠所有项目组
+    // 折叠所有项目组（委托给 VSCode 内置命令，正确重置内部状态）
     vscode.commands.registerCommand('planViewer.collapseAll', () => {
       treeProvider.collapseAll();
     }),

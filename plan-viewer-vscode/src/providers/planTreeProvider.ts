@@ -20,6 +20,8 @@ export class ProjectGroupItem extends vscode.TreeItem {
     const displayName = projectName || '(未分组)';
     super(displayName, state);
 
+    // 稳定的 id 让 VSCode 能通过 treeView.reveal() 定位到该节点
+    this.id = `group:${projectName || '__ungrouped__'}`;
     this.projectName = projectName;
     this.plans = plans;
     this.description = `${plans.length} 个计划`;
@@ -36,8 +38,6 @@ export class PlanTreeDataProvider implements vscode.TreeDataProvider<vscode.Tree
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
   private groupByProject: boolean;
-  /** 一次性折叠/展开覆盖状态，消费后重置为 null */
-  private groupCollapsibleOverride: vscode.TreeItemCollapsibleState | null = null;
 
   constructor(
     private readonly planService: PlanService,
@@ -58,16 +58,28 @@ export class PlanTreeDataProvider implements vscode.TreeDataProvider<vscode.Tree
     this.refresh();
   }
 
-  /** 展开所有项目组 */
-  expandAll(): void {
-    this.groupCollapsibleOverride = vscode.TreeItemCollapsibleState.Expanded;
-    this.refresh();
+  /**
+   * 展开所有项目组
+   * 使用 treeView.reveal() 强制展开，可绕过 VSCode 的内部折叠状态缓存
+   */
+  async expandAll(treeView: vscode.TreeView<vscode.TreeItem>): Promise<void> {
+    if (!this.groupByProject) return;
+    const items = await this._buildGroupItems();
+    for (const item of items) {
+      try {
+        await treeView.reveal(item, { expand: true, select: false, focus: false });
+      } catch {
+        // 节点不可见或树视图未激活时忽略错误
+      }
+    }
   }
 
-  /** 折叠所有项目组 */
+  /**
+   * 折叠所有项目组
+   * 使用 VSCode 内置命令，可正确重置内部展开状态缓存
+   */
   collapseAll(): void {
-    this.groupCollapsibleOverride = vscode.TreeItemCollapsibleState.Collapsed;
-    this.refresh();
+    vscode.commands.executeCommand('workbench.actions.treeView.planViewer.planList.collapseAll');
   }
 
   getTreeItem(element: vscode.TreeItem): vscode.TreeItem {
@@ -126,9 +138,23 @@ export class PlanTreeDataProvider implements vscode.TreeDataProvider<vscode.Tree
       return b.latestMtime.localeCompare(a.latestMtime);
     });
 
-    // 消费折叠/展开覆盖状态（仅生效一次）
-    const state = this.groupCollapsibleOverride ?? vscode.TreeItemCollapsibleState.Expanded;
-    this.groupCollapsibleOverride = null;
-    return groups.map(({ key, plans: groupPlans }) => new ProjectGroupItem(key, groupPlans, state));
+    return groups.map(({ key, plans: groupPlans }) => new ProjectGroupItem(key, groupPlans));
+  }
+
+  /**
+   * 构建当前分组节点列表（供 expandAll 使用）
+   * 由于节点带有稳定 id，VSCode 可通过 reveal() 匹配到树中对应节点
+   */
+  private async _buildGroupItems(): Promise<ProjectGroupItem[]> {
+    const plans = await this.planService.listPlans();
+    const groupMap = new Map<string, PlanInfo[]>();
+    for (const plan of plans) {
+      const key = plan.project;
+      if (!groupMap.has(key)) groupMap.set(key, []);
+      groupMap.get(key)!.push(plan);
+    }
+    return Array.from(groupMap.entries()).map(
+      ([key, groupPlans]) => new ProjectGroupItem(key, groupPlans, vscode.TreeItemCollapsibleState.Expanded),
+    );
   }
 }
