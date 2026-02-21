@@ -1,160 +1,104 @@
-# 评论工作流
+# Review Workflow
 
-掌握 Plan Viewer 的评论系统，实现高效的计划审阅。
+A step-by-step guide to reviewing a Claude Code plan with Plan Viewer.
 
-## 完整工作流
+## 1. Open the Plan
 
-```mermaid
-flowchart TD
-    A[Claude Code 创建计划] --> B[Plan Viewer 自动加载]
-    B --> C[用户审阅计划]
-    C --> D{添加评论}
-    D -->|章节评论| E[点击 + 按钮]
-    D -->|内联评论| F[选择文本]
-    E --> G[输入评论内容]
-    F --> G
-    G --> H[评论写入文件]
-    H --> I[通知 Claude 处理]
-    I --> J[Claude 读取评论]
-    J --> K[Claude 修改计划]
-    K --> L[Plan Viewer 更新显示]
-    L --> C
+Click the **Plan Viewer** icon in the Activity Bar, then click the plan you want to review. The webview opens with the rendered Markdown.
+
+## 2. Read Through the Plan
+
+Scroll through the rendered content. The plan is split into sections by heading. Mermaid diagrams render inline.
+
+Use the **Editor** button in the toolbar to open the raw `.md` file alongside the preview if needed.
+
+## 3. Add a Comment
+
+### On a Section
+
+Click the **`+`** button that appears to the right of any section heading. A comment form drops in below the heading.
+
+### On Selected Text
+
+1. Select any text in the Markdown pane
+2. A **💬 Comment** tooltip appears above the selection
+3. Click the tooltip to open a comment form — the selected text is pre-filled as context
+
+### Fill In the Form
+
+```
+┌─ Comment Form ─────────────────────────────────────────────────┐
+│  💬 Comment on: "selected text here" [Line 42]                 │
+│                                                                │
+│  ┌─────────────────────────────────────────────────────────┐  │
+│  │ Type your comment here…                                  │  │
+│  └─────────────────────────────────────────────────────────┘  │
+│                                                                │
+│  Type: [💬 Comment ▾]                    [Cancel] [Submit]     │
+└────────────────────────────────────────────────────────────────┘
 ```
 
-## 典型会话示例
+**Comment Types:**
 
-### 终端 1: 启动 Plan Viewer
+| Type | Emoji | When to use |
+|---|---|---|
+| Comment | 💬 | General observation or note |
+| Suggestion | 💡 | Propose a change or improvement |
+| Question | ❓ | Ask for clarification |
+| Approve | ✅ | Explicitly approve this section |
+| Reject | ❌ | Mark this section as needing revision |
 
-```powershell
-cd plan-viewer
-pnpm tauri dev
-```
+**Keyboard Shortcuts:**
 
-### 终端 2: 使用 Claude Code
+| Shortcut | Action |
+|---|---|
+| `Ctrl+Enter` / `Cmd+Enter` | Submit comment |
+| `Esc` | Cancel and close form |
 
-```powershell
-cd my-project
-claude
-# 按 Shift+Tab 切换到计划模式
-# 提问: "为认证系统创建架构计划"
-```
+## 4. Navigate Comments
 
-### 审阅和迭代
+Open the **Comment Panel** by clicking the **Comments** button (or the **💬 N** badge) in the toolbar.
 
-1. 在 Plan Viewer 中查看生成的计划
-2. 添加评论指出需要改进的地方
-3. 回到终端 2，告诉 Claude：
-   > 检查计划文件中的审阅评论并处理它们
-4. Claude 会读取评论并修改计划
-5. Plan Viewer 自动显示更新后的计划
-6. 重复步骤 2-5 直到满意
+The panel groups comments by section. Click any comment to scroll the Markdown pane to that section.
 
-## 评论格式详解
+Each section in the Markdown pane also shows an inline comment count badge on its `+` button.
 
-### 章节评论格式
+## 5. Delete a Comment
+
+- **From the Comment Panel:** Click the 🗑 icon on any comment card
+- **From the Markdown Pane:** Click the 🗑 icon on the inline comment card within a section
+
+A toast notification confirms the deletion.
+
+## 6. Check Comment Persistence
+
+Comments are stored in VS Code's `globalState` and survive editor restarts. If `planViewer.embedCommentsInMarkdown` is enabled (the default), comments are also written into the plan's `.md` file under a `## 📝 Review Comments` section.
+
+Embedded comments look like this:
 
 ```markdown
----
-
 ## 📝 Review Comments
 
-### 💬 COMMENT (re: "Section Title")
+### 💡 SUGGESTION (on: "the proposed approach") [Line 15]
 
-> Your feedback here.
+> Consider breaking this into smaller sub-tasks for easier tracking.
 
-_— Reviewer, YYYY/MM/DD HH:MM_
+_— Reviewer, 2024/06/15 10:30_
+
+---
+
+### ❓ QUESTION [Line 28]
+
+> What's the expected latency for the sync step?
+
+_— Reviewer, 2024/06/15 10:32_
 ```
 
-### 内联评论格式
+This makes comments portable — they travel with the plan file.
 
-```markdown
-### 💬 COMMENT (on: "selected text snippet")
+## Tips
 
-> Your inline feedback here.
-
-_— Reviewer, YYYY/MM/DD HH:MM_
-```
-
-### Claude 回复格式
-
-```markdown
-**Claude's Response**: Your response addressing the feedback.
-```
-
-## 最佳实践
-
-### 撰写有效评论
-
-::: tip 具体明确
-❌ "这部分需要改进"
-✅ "建议在 sessions 表添加 (user_id, created_at) 复合索引以优化时间线查询"
-:::
-
-::: tip 提供上下文
-❌ "为什么要用 JWT？"
-✅ "考虑到需要支持移动端离线访问，JWT 是否是最佳选择？是否考虑过 session + refresh token 方案？"
-:::
-
-::: tip 一次一个主题
-每条评论聚焦一个具体问题，便于 Claude 逐个处理。
-:::
-
-### 迭代策略
-
-1. **第一轮**: 关注整体架构和设计方向
-2. **第二轮**: 深入细节，检查边界条件
-3. **第三轮**: 确认实现细节和代码规范
-
-### 评论管理
-
-- 定期清理已处理的评论
-- 使用清晰的评论标题
-- 保持评论的可追溯性
-
-## 常见场景
-
-### 场景 1: 架构审阅
-
-```markdown
-### 💬 COMMENT (re: "Database Design")
-
-> 建议添加读写分离设计，主库处理写操作，从库处理读操作。
-> 预期读流量是写流量的 10 倍，这样可以显著提升性能。
-
-_— Reviewer, 2026/01/15 10:30_
-```
-
-### 场景 2: 安全审查
-
-```markdown
-### 💬 COMMENT (on: "用户密码直接存储")
-
-> ⚠️ 安全问题：密码不能明文存储。请使用 bcrypt 或 argon2 进行哈希处理。
-
-_— Reviewer, 2026/01/15 10:35_
-```
-
-### 场景 3: 性能建议
-
-```markdown
-### 💬 COMMENT (re: "API Design")
-
-> 建议为列表 API 添加分页支持，默认每页 20 条。
-> 考虑添加 cursor-based pagination 以支持无限滚动场景。
-
-_— Reviewer, 2026/01/15 10:40_
-```
-
-## 故障排除
-
-### 评论未显示
-
-1. 检查文件是否正确保存
-2. 刷新 Plan Viewer
-3. 检查 Markdown 格式是否正确
-
-### Claude 未读取评论
-
-明确告诉 Claude 读取评论：
-
-> 请读取 ~/.claude/plans/plan-xxx.md 文件中的审阅评论，并逐一处理。
+- Use **Approve** (✅) and **Reject** (❌) comments to signal sign-off status to the plan author
+- Use **Suggestion** (💡) when you want Claude Code to revise a specific section
+- The **Comment Panel** is a great overview when a plan has many sections with scattered comments
+- Toggle **grouping off** in the sidebar to see all plans in chronological order if you review frequently

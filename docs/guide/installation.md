@@ -1,189 +1,81 @@
-# 安装配置
+# Installation
 
-详细的安装和配置指南。
+## VS Code Marketplace (Recommended)
 
-## 环境准备
+The easiest way to install Plan Viewer:
 
-### Node.js 安装
+1. Open VS Code
+2. Press `Ctrl+Shift+X` (Windows/Linux) or `Cmd+Shift+X` (macOS) to open Extensions
+3. Search for **`Plan Viewer`**
+4. Click **Install** on the entry published by **anthropic-community**
 
-::: code-group
-```powershell [Windows]
-winget install OpenJS.NodeJS.LTS
+Or open the Marketplace in your browser and click **Install**.
+
+## Install from VSIX
+
+If you have a `.vsix` file (e.g., from a GitHub release):
+
+1. Open VS Code
+2. Open the Extensions panel (`Ctrl+Shift+X`)
+3. Click the **`···`** menu (top-right of the Extensions panel)
+4. Choose **Install from VSIX…**
+5. Select the `.vsix` file
+
+Alternatively, use the command line:
+
+```bash
+code --install-extension plan-viewer-0.1.0.vsix
 ```
 
-```bash [macOS]
-brew install node
+## Build from Source
+
+Clone the repository and build locally using [`just`](https://just.systems):
+
+```bash
+git clone https://github.com/anthropic-community/plan-viewer-vscode.git
+cd plan-viewer-vscode
+
+# Install dependencies and package the extension
+just package
+# → outputs/plan-viewer-*.vsix
+
+# Install the built extension
+code --install-extension outputs/plan-viewer-*.vsix
 ```
 
-```bash [Linux]
-curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
-sudo apt install -y nodejs
+::: details Available just commands
+```
+just install      # Install npm dependencies
+just dev          # Start watch mode (extension + webview in parallel)
+just build        # Production build
+just type-check   # TypeScript check (tsc --noEmit)
+just test         # Run tests (vitest)
+just package      # Build .vsix → outputs/
+just clean        # Remove dist/, dist-webview/, node_modules/, outputs/
 ```
 :::
 
-### pnpm 安装
+## System Requirements
 
-```bash
-npm install -g pnpm
-```
+| Requirement | Version |
+|---|---|
+| Visual Studio Code | ≥ 1.85.0 |
+| Node.js (build only) | ≥ 18 |
+| just (build only) | any recent version |
 
-### Rust 安装
+## Configure the Plans Directory
 
-::: code-group
-```powershell [Windows]
-winget install Rustlang.Rustup
-```
+By default, Plan Viewer reads from `~/.claude/plans`. To use a different location:
 
-```bash [macOS / Linux]
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-```
-:::
-
-验证安装：
-
-```bash
-rustc --version
-cargo --version
-```
-
-## 平台特定配置
-
-### Windows
-
-1. 安装 [Visual Studio C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
-2. 在安装程序中选择 **"Desktop development with C++"** 工作负载
-3. 确保安装了 Windows SDK
-
-### macOS
-
-1. 安装 Xcode Command Line Tools：
-   ```bash
-   xcode-select --install
-   ```
-
-2. 如果使用 Apple Silicon (M1/M2)，确保 Rust 使用正确的目标：
-   ```bash
-   rustup target add aarch64-apple-darwin
-   ```
-
-### Linux
-
-安装所需的系统库：
-
-```bash
-sudo apt update
-sudo apt install -y \
-  libwebkit2gtk-4.1-dev \
-  build-essential \
-  libssl-dev \
-  libgtk-3-dev \
-  libayatana-appindicator3-dev \
-  librsvg2-dev
-```
-
-## 项目配置
-
-### 克隆项目
-
-```bash
-git clone git@github.com:mekalz/plan_viewer.git
-cd plan_viewer
-```
-
-### 安装依赖
-
-```bash
-pnpm install
-```
-
-### 配置文件
-
-主要配置文件位于 `src-tauri/tauri.conf.json`：
+1. Open VS Code Settings (`Ctrl+,`)
+2. Search for **`planViewer.plansDirectory`**
+3. Enter the full path to your plans folder
 
 ```json
+// settings.json
 {
-  "productName": "Plan Viewer",
-  "version": "1.0.0",
-  "identifier": "com.plan-viewer.app",
-  "app": {
-    "windows": [
-      {
-        "title": "Plan Viewer",
-        "width": 1200,
-        "height": 800,
-        "resizable": true,
-        "fullscreen": false
-      }
-    ]
-  }
+  "planViewer.plansDirectory": "/path/to/your/plans"
 }
 ```
 
-## 构建选项
-
-### 开发构建
-
-```bash
-pnpm tauri dev
-```
-
-### 生产构建
-
-```bash
-pnpm tauri build
-```
-
-构建产物位于 `src-tauri/target/release/bundle/`。
-
-### 调试构建
-
-```bash
-pnpm tauri build --debug
-```
-
-## 可用的 just 命令
-
-| 命令 | 描述 |
-|------|------|
-| `just install-deps` | 安装 Node.js 依赖 |
-| `just tauri-dev` | 启动 Tauri 开发模式 |
-| `just tauri-build` | 构建生产版本 |
-| `just tauri-build-debug` | 构建调试版本 |
-| `just vite-dev` | 仅启动 Vite 开发服务器 |
-| `just vite-build` | 构建前端 |
-| `just check-all` | 检查 Rust 和 Node.js |
-| `just clean` | 清理构建产物 |
-
-## 故障排除
-
-### Rust 未找到
-
-确保 Rust 已安装且 `cargo` 在 PATH 中：
-
-```bash
-rustc --version
-cargo --version
-```
-
-### WebView2 未找到 (Windows)
-
-Windows 10/11 默认包含 WebView2。如果缺失：
-
-- 从 [Microsoft Edge WebView2](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) 下载
-
-### 端口被占用
-
-Vite 默认使用端口 5173。如果被占用，修改 `vite.config.js`：
-
-```javascript
-export default defineConfig({
-  server: {
-    port: 5174
-  }
-})
-```
-
-### 构建链接错误
-
-- **Windows**: 确保安装了 Visual Studio Build Tools 和 C++ 工作负载
-- **Linux**: 确保安装了所有必需的系统库
+Leave the setting empty to use the default `~/.claude/plans`.

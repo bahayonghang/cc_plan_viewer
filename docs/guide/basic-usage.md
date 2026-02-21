@@ -1,89 +1,92 @@
-# 基础使用
+# Basic Usage
 
-学习 Plan Viewer 的基本操作。
+## Interface Overview
 
-## 界面概览
-
-Plan Viewer 的主界面包含以下区域：
+Plan Viewer adds a dedicated icon to the VS Code Activity Bar. Click it to reveal the **Plans** sidebar.
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  ┌─────────────┐  ┌─────────────────────────────────────┐   │
-│  │             │  │                                     │   │
-│  │  计划列表   │  │           计划内容视图              │   │
-│  │             │  │                                     │   │
-│  │  - Plan 1   │  │   Markdown 渲染 + Mermaid 图表      │   │
-│  │  - Plan 2   │  │                                     │   │
-│  │  - Plan 3   │  │                                     │   │
-│  │             │  │                                     │   │
-│  └─────────────┘  └─────────────────────────────────────┘   │
-│                                                             │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │                    评论侧边栏                        │   │
-│  │  - 评论 1                                            │   │
-│  │  - 评论 2                                            │   │
-│  └─────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
+┌─ Activity Bar ──────────────────────────────────────────────────┐
+│  [📋]  ← Plan Viewer icon                                        │
+└──────────────────────────────────────────────────────────────────┘
+
+┌─ Plans Sidebar ─────────┐  ┌─ Webview Panel ──────────────────────┐
+│  PLANS              [↺] │  │  ┌─ Toolbar ──────────────────────┐  │
+│                         │  │  │  plan-name.md   💬 3  [Editor] │  │
+│  ▼ my-project           │  │  └─────────────────────────────────┘  │
+│    ├─ plan-2024.md      │  │                                        │
+│    └─ plan-draft.md  ←──┼──┼──(click to open)                      │
+│                         │  │  # Plan Title                         │
+│  ▼ other-project        │  │                                        │
+│    └─ feature.md        │  │  Section content…                     │
+│                         │  │                                [+ 💬]  │
+│  (Ungrouped)            │  │  ┌─ Comment Card ──────────────────┐  │
+│    └─ misc.md           │  │  │ 💬 "This looks good"  🗑         │  │
+│                         │  │  └────────────────────────────────┘  │
+└─────────────────────────┘  └────────────────────────────────────────┘
 ```
 
-## 计划列表
+## Plans Sidebar
 
-左侧边栏显示所有可用的计划文件：
+### Toolbar Actions
 
-- 文件名作为标题
-- 最后修改时间
-- 点击选择查看
+| Icon | Command | Description |
+|---|---|---|
+| `↺` | Refresh Plans | Manually refresh the plan list |
+| `⚙` | Settings | Open VS Code settings filtered to `planViewer.*` |
+| `🌲` | Toggle Grouping | Switch between grouped/flat plan list |
+| `⊞` | Expand All | Expand all project groups |
+| `⊟` | Collapse All | Collapse all project groups |
 
-## 计划视图
+### Project Grouping
 
-主视图区域显示计划内容：
+Plans are automatically grouped by the project name extracted from the plan content. The extension looks for:
 
-- Markdown 渲染
-- Mermaid 图表实时渲染
-- 代码语法高亮
-- 目录导航
+1. A `cwd:`, `Working directory:`, or `Project:` metadata line at the top → uses the path basename
+2. An absolute path in the content → uses the basename
+3. A `# Heading` line → uses text before `:` / `-` / `–` (up to 20 characters)
 
-## 添加评论
+Plans without a detectable project appear under **(Ungrouped)**. Toggle grouping off for a flat list with the `🌲` toolbar button.
 
-### 章节评论
+### Context Menu
 
-1. 找到要评论的章节
-2. 点击章节标题旁的 `+` 按钮
-3. 在弹出的对话框中输入评论
-4. 点击保存
+Right-click a plan entry to open it directly in the VS Code text editor.
 
-### 内联评论
+## Webview Panel
 
-1. 选择要评论的文本
-2. 松开鼠标后会出现评论选项
-3. 输入评论内容
-4. 点击保存
+Click any plan in the sidebar to open it in the webview panel. The panel consists of three parts:
 
-## 主题切换
+### Toolbar
 
-点击右上角的主题切换按钮：
+- **Plan filename** — shown on the left
+- **💬 N** — badge showing total comment count (click to toggle the Comment Panel)
+- **Editor** button — opens the `.md` file in VS Code's built-in text editor
 
-- 🌙 深色主题
-- ☀️ 浅色主题
+### Markdown Pane
 
-## 快捷操作
+The main content area renders the plan as styled Markdown, including:
 
-| 操作 | 说明 |
-|------|------|
-| 点击计划 | 打开计划 |
-| 点击 `+` | 添加章节评论 |
-| 选择文本 | 添加内联评论 |
-| 点击评论 | 跳转到相关位置 |
+- Syntax-highlighted code blocks
+- Mermaid diagrams (rendered inline)
+- Section-level comment triggers
 
-## 文件位置
+Each section heading has a **`+`** button on the right edge. Click it to open a comment form for that section. If comments exist, the button shows the count instead of `+`.
 
-计划文件存储在：
+### Hover-to-Comment
 
-```
-~/.claude/plans/
-├── plan-001.md
-├── plan-002.md
-└── ...
-```
+Select any text in the Markdown pane — a **💬 Comment** tooltip appears above the selection. Click it to open a comment form pre-filled with the selected text.
 
-你可以直接编辑这些文件，Plan Viewer 会自动检测变更并更新显示。
+### Comment Panel
+
+Click the **Comments** toolbar button to open a collapsible panel on the right side. It lists all comments grouped by section. Click any comment to scroll the Markdown pane to that section.
+
+## Configuration
+
+Open VS Code Settings (`Ctrl+,`) and search for `planViewer` to see all options:
+
+| Setting | Default | Description |
+|---|---|---|
+| `planViewer.plansDirectory` | `~/.claude/plans` | Custom path to plans directory |
+| `planViewer.fontSize` | `14` | Font size for plan content (px) |
+| `planViewer.lineHeight` | `1.7` | Line height for plan content |
+| `planViewer.embedCommentsInMarkdown` | `true` | Embed comments into the `.md` file |
+| `planViewer.groupByProject` | `true` | Group sidebar by project name |

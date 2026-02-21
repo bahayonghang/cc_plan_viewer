@@ -1,72 +1,80 @@
-# 开发指南
+# Development Guide
 
-欢迎参与 Plan Viewer 的开发！本指南将帮助你了解项目架构和开发流程。
+Everything you need to start contributing to Plan Viewer.
 
-## 技术栈
+## Tech Stack
 
-| 技术 | 用途 |
-|------|------|
-| Tauri 2.0 | 桌面应用框架 |
-| Rust | 后端逻辑 |
-| Vite | 前端构建工具 |
-| Vanilla JS | 前端逻辑 |
-| Mermaid | 图表渲染 |
-| highlight.js | 代码高亮 |
+| Layer | Technology |
+|---|---|
+| Extension host | TypeScript, Node.js, VS Code API |
+| Webview UI | Preact, TypeScript, Vite |
+| Markdown rendering | `marked` + `marked-highlight` |
+| Syntax highlighting | `highlight.js` |
+| Diagram rendering | `mermaid` |
+| Testing | `vitest` |
+| Extension bundler | `esbuild` |
+| Packaging | `@vscode/vsce` |
 
-## 开发环境设置
+## Prerequisites
+
+- **Node.js** ≥ 18
+- **npm** ≥ 9
+- **VS Code** ≥ 1.85.0
+- [`just`](https://just.systems) task runner (optional, but recommended)
+
+## Setup
 
 ```bash
-# 克隆项目
-git clone git@github.com:mekalz/plan_viewer.git
-cd plan_viewer
+git clone https://github.com/anthropic-community/plan-viewer-vscode.git
+cd plan-viewer-vscode
 
-# 安装依赖
-pnpm install
-
-# 启动开发模式
-pnpm tauri dev
+just install   # or: cd plan-viewer-vscode && npm install
 ```
 
-## 开发工作流
+## Development Commands
 
-1. **启动开发模式**: `pnpm tauri dev`
-2. **修改代码**:
-   - 前端代码在 `src/` 目录，修改后自动热重载
-   - Rust 代码在 `src-tauri/src/`，修改后自动重新编译
-3. **测试变更**: 在应用中验证功能
-4. **提交代码**: 遵循提交规范
+All commands are available via `just` from the repository root, or via `npm run` from `plan-viewer-vscode/`:
 
-## 项目结构
+| `just` command | `npm run` equivalent | Description |
+|---|---|---|
+| `just install` | `npm install` | Install dependencies |
+| `just dev` | `npm run dev` | Watch mode (extension + webview in parallel) |
+| `just build` | `npm run build` | Production build + package `.vsix` |
+| `just type-check` | `npx tsc --noEmit` | TypeScript type check |
+| `just test` | `npm test` | Run vitest test suite |
+| `just package` | `npm run package` | Build `.vsix` → `outputs/` |
+| `just clean` | — | Remove `dist/`, `dist-webview/`, `node_modules/`, `outputs/` |
 
-```
-plan-viewer/
-├── src/                    # 前端源码
-│   ├── index.html          # 主 HTML
-│   ├── main.js             # 入口文件
-│   ├── app.js              # 应用逻辑
-│   └── styles/
-│       └── main.css        # 样式
-│
-├── src-tauri/              # Tauri (Rust) 后端
-│   ├── src/
-│   │   └── main.rs         # Rust 后端代码
-│   ├── icons/              # 应用图标
-│   ├── Cargo.toml          # Rust 依赖
-│   └── tauri.conf.json     # Tauri 配置
-│
-├── docs/                   # 文档源码
-│   ├── .vitepress/         # VitePress 配置
-│   ├── features/           # 功能文档
-│   ├── guide/              # 使用指南
-│   └── development/        # 开发文档
-│
-├── package.json            # Node.js 依赖
-├── vite.config.js          # Vite 配置
-└── justfile                # Just 命令
+## Running the Extension Locally
+
+1. Run `just dev` (or `npm run dev` in `plan-viewer-vscode/`)
+2. Press `F5` in VS Code to open a new **Extension Development Host** window
+3. The Plan Viewer extension is active in the development window
+4. Edit source files — the watcher rebuilds automatically; reload the extension host with `Ctrl+R` to pick up changes
+
+::: tip Webview Hot Reload
+The webview (`dist-webview/`) is rebuilt by Vite's watch mode. After Vite rebuilds, close and reopen the Plan Viewer webview panel to load the latest webview bundle.
+:::
+
+## Running Tests
+
+```bash
+just test           # Run all tests once
+cd plan-viewer-vscode && npm run test:watch   # Watch mode
 ```
 
-## 下一步
+Tests live in `plan-viewer-vscode/src/**/*.test.ts` and use `vitest`.
 
-- [Tauri 开发](/development/tauri) - 了解 Tauri 后端开发
-- [项目结构](/development/architecture) - 深入了解架构
-- [自定义配置](/development/customization) - 自定义应用
+## Code Style
+
+- TypeScript strict mode enabled
+- ESLint configured for `.ts` and `.tsx` files
+- Run `npm run lint` in `plan-viewer-vscode/` to check
+
+## Submitting a Pull Request
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feat/my-feature`
+3. Make your changes with tests
+4. Run `just type-check && just test`
+5. Open a pull request against `main`

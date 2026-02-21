@@ -1,269 +1,166 @@
-# 项目结构
+# Architecture
 
-深入了解 Plan Viewer 的项目架构。
+Plan Viewer uses a **dual-process architecture** with two independently built processes that communicate via VS Code's message-passing API.
 
-## 目录结构
+## Overview
 
 ```
-plan-viewer/
-├── src/                       # 前端源码
-│   ├── index.html             # 主 HTML 模板
-│   ├── main.js                # 应用入口点
-│   ├── app.js                 # 核心应用逻辑
-│   └── styles/
-│       └── main.css           # 全局样式
-│
-├── src-tauri/                 # Tauri 后端
-│   ├── src/
-│   │   └── main.rs            # Rust 主程序
-│   ├── gen/                   # 生成的模式文件
-│   │   └── schemas/
-│   ├── icons/                 # 应用图标
-│   │   ├── icon.svg
-│   │   ├── icon.ico           # Windows
-│   │   └── icon-*.png         # 各尺寸 PNG
-│   ├── Cargo.toml             # Rust 依赖配置
-│   ├── Cargo.lock             # 依赖锁定文件
-│   ├── build.rs               # 构建脚本
-│   └── tauri.conf.json        # Tauri 配置
-│
-├── docs/                      # VitePress 文档
-│   ├── .vitepress/
-│   │   ├── config.mts         # 文档配置
-│   │   └── theme/             # 自定义主题
-│   ├── public/
-│   │   └── images/            # 图片资源
-│   ├── features/              # 功能文档
-│   ├── guide/                 # 使用指南
-│   ├── development/           # 开发文档
-│   └── index.md               # 文档首页
-│
-├── package.json               # Node.js 配置
-├── pnpm-lock.yaml             # 依赖锁定
-├── vite.config.js             # Vite 配置
-├── justfile                   # Just 命令定义
-├── icon.svg                   # 项目 Logo
-├── plan_viewer.md             # Claude Code 审阅说明
-├── README.md                  # 项目说明
-├── CONTRIBUTING.md            # 贡献指南
-└── LICENSE                    # MIT 许可证
+┌─────────────────────────────────────────────────────────────────┐
+│                        VS Code Host                             │
+│                                                                 │
+│  ┌─────────────────────────────┐   ┌─────────────────────────┐ │
+│  │      Extension Host         │   │        Webview          │ │
+│  │   (Node.js / TypeScript)    │   │  (Browser sandbox)      │ │
+│  │                             │   │  Preact + TypeScript     │ │
+│  │  extension.ts               │   │                         │ │
+│  │  ├── PlanService            │   │  App.tsx                │ │
+│  │  ├── CommentService         │   │  ├── Toolbar            │ │
+│  │  ├── FileWatcher            │   │  ├── MarkdownViewer     │ │
+│  │  ├── PlanTreeProvider       │   │  │   ├── CommentForm    │ │
+│  │  └── WebviewPanelManager ───┼───┼──│   └── CommentCard   │ │
+│  │                         ↑   │   │  └── CommentPanel       │ │
+│  │   postMessage / onMessage   │   │                         │ │
+│  └─────────────────────────────┘   └─────────────────────────┘ │
+│                                                                 │
+│  ┌──────────────────┐  ┌──────────────────────────────────────┐ │
+│  │   Plans Sidebar   │  │           Filesystem                │ │
+│  │  (TreeDataProvider│  │  ~/.claude/plans/*.md               │ │
+│  │   + TreeItem)     │  │  VSCode globalState (comments)      │ │
+│  └──────────────────┘  └──────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-## 核心模块
+## Extension Host
 
-### 前端模块 (src/)
+**Entry point:** `src/extension.ts`
+**Build:** esbuild → `dist/extension.js` (CommonJS)
+**Runtime:** Node.js with full VS Code API access
 
-#### main.js
+Responsibilities:
+- Register commands, tree view, and file watcher
+- Read/write plan files and comment data
+- Manage the webview panel lifecycle
+- Route messages between the webview and services
 
-应用入口点，负责：
+## Webview
 
-- 初始化 Tauri API
-- 设置事件监听器
-- 启动应用
+**Entry point:** `src/webview/App.tsx`
+**Build:** Vite → `dist-webview/`
+**Runtime:** Sandboxed browser environment (no Node.js, no direct filesystem)
 
-#### app.js
+Responsibilities:
+- Render Markdown and Mermaid diagrams
+- Display and manage comments in the UI
+- Send user actions to the extension host via `postMessage`
 
-核心应用逻辑，包含：
+## Message Protocol
 
-- 计划加载和渲染
-- 评论系统管理
-- 主题切换
-- Mermaid 图表渲染
+All communication is typed in `src/webview/lib/messageProtocol.ts`.
 
-#### main.css
+### Extension → Webview
 
-全局样式定义：
+| Message | Payload | Description |
+|---|---|---|
+| `loadPlan` | `Plan` object | Load (or reload) a plan in the webview |
+| `planList` | `PlanInfo[]` | Update the plan list (unused in webview currently) |
+| `commentAdded` | `Comment` | A new comment was saved — update UI |
+| `commentDeleted` | `{ commentId }` | A comment was deleted — remove from UI |
+| `configChanged` | `{ fontSize, lineHeight }` | Config changed — update CSS variables |
 
-- CSS 变量（主题）
-- 布局样式
-- 组件样式
-- 响应式设计
+### Webview → Extension
 
-### 后端模块 (src-tauri/src/main.rs)
+| Message | Payload | Description |
+|---|---|---|
+| `addComment` | comment data | User submitted a comment form |
+| `deleteComment` | `{ planId, commentId }` | User clicked delete on a comment |
+| `openPlan` | `{ planId }` | User selected a plan (unused; tree handles this) |
+| `requestPlanList` | — | Request an updated plan list |
+| `openInEditor` | `{ planId }` | User clicked "Editor" button |
+| `showToast` | `{ message }` | Show a VS Code information message |
 
-Rust 后端实现：
+### Initial Plan Injection
 
-- 文件系统操作
-- 文件监听
-- 评论管理
-- IPC 命令处理
+To avoid a race condition between webview load and the first `loadPlan` message, the extension injects the initial plan directly into `window.__INITIAL_PLAN__` when creating the webview HTML. `App.tsx` reads this value on mount.
 
-## 数据流
+## Service Layer
 
-```mermaid
-flowchart LR
-    subgraph User[用户操作]
-        A[查看计划]
-        B[添加评论]
-        C[切换主题]
-    end
-    
-    subgraph Frontend[前端]
-        D[UI 更新]
-        E[状态管理]
-    end
-    
-    subgraph Tauri[Tauri 层]
-        F[IPC 调用]
-    end
-    
-    subgraph Backend[后端]
-        G[文件操作]
-        H[事件发送]
-    end
-    
-    subgraph Storage[存储]
-        I[计划文件]
-        J[localStorage]
-    end
-    
-    A --> D
-    B --> F --> G --> I
-    C --> J
-    G --> H --> D
-    I --> G --> D
+### PlanService (`src/services/planService.ts`)
+
+- `getPlansDir()` — Returns the configured or default plans directory
+- `listPlans()` — Lists all `.md` files as `PlanInfo[]`, sorted by mtime
+- `getPlan(planId)` — Loads full plan content + runs bidirectional comment sync
+- `loadComments(planId)` / `saveComments(planId, comments)` — globalState I/O
+- `extractProject(content)` — Heuristic project name extraction with 4-level fallback; cached by `planId:mtime`
+
+### CommentService (`src/services/commentService.ts`)
+
+- `addComment(planId, data)` — Creates comment, writes to globalState, optionally injects into `.md`
+- `deleteComment(planId, commentId)` — Removes from globalState and optionally from `.md`
+
+### Comment Pipeline
+
+Four services handle the comment ↔ Markdown conversion:
+
+```
+Comment object
+    │
+    ▼ commentBuilder.ts       → Markdown block text
+    │
+    ▼ commentInjector.ts      → Insert/remove blocks in .md file
+    │
+    ▼ commentParser.ts        → Markdown block → Comment object
+    │
+    ▼ commentSync.ts          → Orchestrate bidirectional sync
 ```
 
-## 组件关系
+### FileWatcher (`src/services/fileWatcher.ts`)
 
-```mermaid
-classDiagram
-    class PlanViewer {
-        +loadPlans()
-        +selectPlan(id)
-        +currentPlan
-    }
-    
-    class PlanList {
-        +plans[]
-        +onSelect()
-    }
-    
-    class PlanContent {
-        +render()
-        +mermaidDiagrams
-    }
-    
-    class CommentManager {
-        +addComment()
-        +deleteComment()
-        +syncToMarkdown()
-    }
-    
-    class ThemeManager {
-        +toggle()
-        +currentTheme
-        +persist()
-    }
-    
-    class FileWatcher {
-        +start()
-        +stop()
-        +onChange()
-    }
-    
-    PlanViewer --> PlanList
-    PlanViewer --> PlanContent
-    PlanViewer --> CommentManager
-    PlanViewer --> ThemeManager
-    PlanViewer --> FileWatcher
+Wraps a VS Code `FileSystemWatcher` on `**/*.md` with a 300 ms debounce. Exposes `onCreate`, `onDelete`, `onChanged` callbacks wired to tree refresh and webview reload.
+
+## Tree View
+
+**Provider:** `src/providers/planTreeProvider.ts`
+
+Two-level tree:
+- **Top level:** `ProjectGroupItem` (folder icon, one per project) or flat `PlanTreeItem` list
+- **Second level:** `PlanTreeItem` leaves sorted by mtime descending
+
+**Toggle:** `planViewer.toggleGrouping` command flips `groupByProject` config and calls `refresh()`.
+
+## Build System
+
+| Process | Tool | Input | Output |
+|---|---|---|---|
+| Extension host | esbuild (`esbuild.mjs`) | `src/extension.ts` | `dist/extension.js` |
+| Webview | Vite + `@preact/preset-vite` | `src/webview/App.tsx` | `dist-webview/` |
+
+Both processes run in parallel during development via `concurrently`.
+
+## File Layout
+
 ```
-
-## 配置文件说明
-
-### package.json
-
-```json
-{
-  "name": "plan-viewer",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "tauri": "tauri",
-    "docs:dev": "vitepress dev docs",
-    "docs:build": "vitepress build docs",
-    "docs:preview": "vitepress preview docs"
-  }
-}
+plan-viewer-vscode/
+├── src/
+│   ├── extension.ts              # Activation, command registration
+│   ├── types.ts                  # Shared interfaces (PlanInfo, Plan, Comment)
+│   ├── services/
+│   │   ├── planService.ts        # List/load plans, extractProject, cache
+│   │   ├── commentService.ts     # Add/delete comments, dual-write
+│   │   ├── commentSync.ts        # Bidirectional JSON ↔ Markdown sync
+│   │   ├── commentBuilder.ts     # Comment → Markdown block
+│   │   ├── commentParser.ts      # Markdown block → Comment
+│   │   ├── commentInjector.ts    # Inject/remove blocks in .md files
+│   │   └── fileWatcher.ts        # Auto-refresh (300ms debounce)
+│   ├── providers/
+│   │   ├── planTreeProvider.ts   # TreeDataProvider, ProjectGroupItem
+│   │   ├── planTreeItem.ts       # Individual plan TreeItem
+│   │   └── webviewPanelManager.ts# Singleton webview lifecycle, message routing
+│   └── webview/                  # Preact frontend (separate Vite build)
+│       ├── App.tsx               # Root component, message handler
+│       ├── lib/
+│       │   └── messageProtocol.ts# Typed message definitions
+│       └── components/           # Toolbar, MarkdownViewer, CommentPanel, etc.
+└── l10n/
+    ├── bundle.l10n.json          # English strings
+    └── bundle.l10n.zh-cn.json   # Chinese (Simplified) strings
 ```
-
-### vite.config.js
-
-```javascript
-import { defineConfig } from 'vite'
-
-export default defineConfig({
-  clearScreen: false,
-  server: {
-    port: 5173,
-    strictPort: true
-  },
-  build: {
-    target: ['es2021', 'chrome100', 'safari13'],
-    minify: !process.env.TAURI_DEBUG ? 'esbuild' : false,
-    sourcemap: !!process.env.TAURI_DEBUG
-  }
-})
-```
-
-### justfile
-
-```just
-# 安装依赖
-install-deps:
-    pnpm install
-
-# 启动开发模式
-tauri-dev:
-    pnpm tauri dev
-
-# 构建生产版本
-tauri-build:
-    pnpm tauri build
-
-# 构建调试版本
-tauri-build-debug:
-    pnpm tauri build --debug
-```
-
-## 扩展指南
-
-### 添加新的 Tauri 命令
-
-1. 在 `main.rs` 中定义命令：
-
-```rust
-#[tauri::command]
-fn my_new_command(param: &str) -> Result<String, String> {
-    Ok(format!("Received: {}", param))
-}
-```
-
-2. 注册命令：
-
-```rust
-fn main() {
-    tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![
-            my_new_command
-        ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
-}
-```
-
-3. 前端调用：
-
-```javascript
-import { invoke } from '@tauri-apps/api/core';
-
-const result = await invoke('my_new_command', { param: 'test' });
-```
-
-### 添加新的 UI 组件
-
-1. 在 `src/` 中创建组件逻辑
-2. 在 `index.html` 中添加 HTML 结构
-3. 在 `main.css` 中添加样式
-4. 在 `app.js` 中集成组件

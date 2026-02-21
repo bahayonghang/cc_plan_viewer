@@ -1,127 +1,118 @@
 import { defineConfig } from 'vitepress'
 
 export default defineConfig({
-  title: 'Plan Viewer',
-  description: 'A Tauri desktop application for Claude Code plans',
-  lang: 'zh-CN',
-  
-  head: [
-    ['meta', { name: 'theme-color', content: '#7c3aed' }],
-    ['meta', { name: 'og:type', content: 'website' }],
-    ['meta', { name: 'og:title', content: 'Plan Viewer | Claude Code Plans Desktop App' }],
-    ['meta', { name: 'og:description', content: 'View, annotate, and comment on Claude Code plans with native file access and live Mermaid diagram rendering' }],
-  ],
+  locales: {
+    root: {
+      label: 'English',
+      lang: 'en-US',
+      themeConfig: {
+        nav: [
+          { text: 'Guide', link: '/guide/' },
+          { text: 'Features', link: '/features/' },
+          { text: 'Development', link: '/development/' },
+        ],
+        sidebar: {
+          '/guide/': [
+            {
+              text: 'Getting Started',
+              items: [
+                { text: 'Quick Start', link: '/guide/' },
+                { text: 'Installation', link: '/guide/installation' },
+                { text: 'Basic Usage', link: '/guide/basic-usage' },
+                { text: 'Review Workflow', link: '/guide/review-workflow' },
+                { text: 'FAQ', link: '/guide/faq' },
+              ],
+            },
+          ],
+          '/features/': [
+            {
+              text: 'Features',
+              items: [
+                { text: 'Overview', link: '/features/' },
+                { text: 'Comment System', link: '/features/comments' },
+                { text: 'Mermaid Diagrams', link: '/features/mermaid' },
+                { text: 'File Watcher', link: '/features/file-watcher' },
+                { text: 'Themes', link: '/features/themes' },
+              ],
+            },
+          ],
+          '/development/': [
+            {
+              text: 'Development',
+              items: [
+                { text: 'Getting Started', link: '/development/' },
+                { text: 'Architecture', link: '/development/architecture' },
+              ],
+            },
+          ],
+        },
+        footer: {
+          message: 'Released under the MIT License.',
+          copyright: 'Copyright © 2024 anthropic-community',
+        },
+      },
+    },
+    zh: {
+      label: '中文',
+      lang: 'zh-CN',
+      themeConfig: {
+        nav: [
+          { text: '指南', link: '/zh/guide/' },
+          { text: '功能', link: '/zh/features/' },
+          { text: '开发', link: '/zh/development/' },
+        ],
+        sidebar: {
+          '/zh/guide/': [
+            {
+              text: '入门',
+              items: [
+                { text: '快速开始', link: '/zh/guide/' },
+                { text: '安装', link: '/zh/guide/installation' },
+                { text: '基本使用', link: '/zh/guide/basic-usage' },
+                { text: '审查工作流', link: '/zh/guide/review-workflow' },
+                { text: '常见问题', link: '/zh/guide/faq' },
+              ],
+            },
+          ],
+          '/zh/features/': [
+            {
+              text: '功能',
+              items: [
+                { text: '概览', link: '/zh/features/' },
+                { text: '评论系统', link: '/zh/features/comments' },
+                { text: 'Mermaid 图表', link: '/zh/features/mermaid' },
+                { text: '文件监听', link: '/zh/features/file-watcher' },
+                { text: '主题', link: '/zh/features/themes' },
+              ],
+            },
+          ],
+          '/zh/development/': [
+            {
+              text: '开发',
+              items: [
+                { text: '开发指南', link: '/zh/development/' },
+                { text: '架构', link: '/zh/development/architecture' },
+              ],
+            },
+          ],
+        },
+        footer: {
+          message: '基于 MIT 协议发布。',
+          copyright: 'Copyright © 2024 anthropic-community',
+        },
+      },
+    },
+  },
 
   themeConfig: {
-    logo: '/images/icon.svg',
-    siteTitle: 'Plan Viewer',
-    
-    nav: [
-      { text: '首页', link: '/' },
-      { text: '功能介绍', link: '/features/' },
-      { text: '使用指南', link: '/guide/' },
-      { text: '开发文档', link: '/development/' },
-      { text: 'GitHub', link: 'https://github.com/mekalz/plan_viewer' }
-    ],
-
-    sidebar: {
-      '/features/': [
-        {
-          text: '功能介绍',
-          items: [
-            { text: '概览', link: '/features/' },
-            { text: 'Mermaid 图表渲染', link: '/features/mermaid' },
-            { text: '评论系统', link: '/features/comments' },
-            { text: '主题切换', link: '/features/themes' },
-            { text: '文件监听', link: '/features/file-watcher' }
-          ]
-        }
-      ],
-      '/guide/': [
-        {
-          text: '使用指南',
-          items: [
-            { text: '快速开始', link: '/guide/' },
-            { text: '安装配置', link: '/guide/installation' },
-            { text: '基础使用', link: '/guide/basic-usage' },
-            { text: '评论工作流', link: '/guide/review-workflow' },
-            { text: '常见问题', link: '/guide/faq' }
-          ]
-        }
-      ],
-      '/development/': [
-        {
-          text: '开发文档',
-          items: [
-            { text: '开发指南', link: '/development/' },
-            { text: 'Tauri 开发', link: '/development/tauri' },
-            { text: '项目结构', link: '/development/architecture' },
-            { text: '自定义配置', link: '/development/customization' }
-          ]
-        }
-      ]
-    },
-
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/mekalz/plan_viewer' }
+      {
+        icon: 'github',
+        link: 'https://github.com/anthropic-community/plan-viewer-vscode',
+      },
     ],
-
-    footer: {
-      message: '基于 MIT 许可证发布',
-      copyright: 'Copyright © 2024-present Plan Viewer'
-    },
-
     search: {
       provider: 'local',
-      options: {
-        translations: {
-          button: {
-            buttonText: '搜索文档',
-            buttonAriaLabel: '搜索文档'
-          },
-          modal: {
-            noResultsText: '无法找到相关结果',
-            resetButtonTitle: '清除查询条件',
-            footer: {
-              selectText: '选择',
-              navigateText: '切换'
-            }
-          }
-        }
-      }
     },
-
-    outline: {
-      label: '页面导航',
-      level: [2, 3]
-    },
-
-    docFooter: {
-      prev: '上一页',
-      next: '下一页'
-    },
-
-    lastUpdated: {
-      text: '最后更新于',
-      formatOptions: {
-        dateStyle: 'short',
-        timeStyle: 'medium'
-      }
-    },
-
-    returnToTopLabel: '返回顶部',
-    sidebarMenuLabel: '菜单',
-    darkModeSwitchLabel: '主题',
-    lightModeSwitchTitle: '切换到浅色模式',
-    darkModeSwitchTitle: '切换到深色模式'
   },
-
-  markdown: {
-    lineNumbers: true,
-    image: {
-      lazyLoading: true
-    }
-  },
-
-  lastUpdated: true
 })

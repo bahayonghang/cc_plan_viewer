@@ -1,103 +1,33 @@
-# 快速开始
+# Quick Start
 
-欢迎使用 Plan Viewer！本指南将帮助你快速上手。
+Get up and running with Plan Viewer in under 5 minutes.
 
-## 前置要求
+## Prerequisites
 
-### 必需软件
+- **Visual Studio Code** ≥ 1.85.0
+- **Claude Code** (or any tool that writes plan `.md` files to `~/.claude/plans`)
 
-| 软件 | 版本要求 | 安装方式 |
-|------|----------|----------|
-| Node.js | LTS 版本 | [下载](https://nodejs.org/) |
-| pnpm | 最新版 | `npm install -g pnpm` |
-| Rust | 最新稳定版 | [rustup](https://rustup.rs/) |
+## Install the Extension
 
-### 平台特定要求
+1. Open VS Code
+2. Open the Extensions panel (`Ctrl+Shift+X` / `Cmd+Shift+X`)
+3. Search for **"Plan Viewer"**
+4. Click **Install**
 
-::: code-group
-```powershell [Windows]
-# 安装 Visual Studio C++ Build Tools
-# 选择 "Desktop development with C++" 工作负载
-winget install Microsoft.VisualStudio.2022.BuildTools
-```
-
-```bash [macOS]
-# 安装 Xcode Command Line Tools
-xcode-select --install
-```
-
-```bash [Linux (Debian/Ubuntu)]
-sudo apt update
-sudo apt install -y libwebkit2gtk-4.1-dev build-essential libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
-```
+::: tip Alternative
+You can also install from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=anthropic-community.plan-viewer) in your browser or from a `.vsix` file. See [Installation](./installation) for details.
 :::
 
-## 安装步骤
+## Open Your First Plan
 
-### 使用 just（推荐）
+1. Click the **Plan Viewer icon** in the Activity Bar (left sidebar)
+2. The **Plans** panel shows all `.md` files from `~/.claude/plans`
+3. Click any plan entry to open the preview webview
 
-[安装 just](https://github.com/casey/just#installation) 后：
+That's it! You can now browse and review your Claude Code plans.
 
-::: code-group
-```powershell [Windows]
-# 克隆项目
-git clone git@github.com:mekalz/plan_viewer.git $HOME\plan-viewer
-cd plan-viewer
+## What's Next
 
-# 安装依赖
-just install-deps
-
-# 启动开发模式
-just tauri-dev
-```
-
-```bash [macOS/Linux]
-# 克隆项目
-git clone git@github.com:mekalz/plan_viewer.git ~/plan-viewer
-cd plan-viewer
-
-# 安装依赖
-just install-deps
-
-# 启动开发模式
-just tauri-dev
-```
-:::
-
-### 手动安装
-
-::: code-group
-```powershell [Windows]
-# 克隆项目
-git clone git@github.com:mekalz/plan_viewer.git $HOME\plan-viewer
-cd plan-viewer
-
-# 安装 Node.js 依赖
-pnpm install
-
-# 启动开发模式
-pnpm tauri dev
-```
-
-```bash [macOS/Linux]
-# 克隆项目
-git clone git@github.com:mekalz/plan_viewer.git ~/plan-viewer
-cd plan-viewer
-
-# 安装 Node.js 依赖
-pnpm install
-
-# 启动开发模式
-pnpm tauri dev
-```
-:::
-
-## 验证安装
-
-启动后，你应该看到 Plan Viewer 窗口打开。如果 `~/.claude/plans/` 目录中有计划文件，它们会自动显示在列表中。
-
-## 下一步
-
-- [安装配置](/guide/installation) - 详细安装说明
-- [基础使用](/guide/basic-usage) - 学习基本操作
-- [评论工作流](/guide/review-workflow) - 掌握评论系统
+- **[Basic Usage](./basic-usage)** — Learn about the interface: sidebar, webview, toolbar, and comment panel
+- **[Review Workflow](./review-workflow)** — Walk through a complete plan review with comments
+- **[Features](../features/)** — Deep dives into comments, Mermaid diagrams, and more

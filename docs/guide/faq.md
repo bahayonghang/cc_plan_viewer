@@ -1,172 +1,94 @@
-# 常见问题
+# FAQ & Troubleshooting
 
-使用 Plan Viewer 过程中可能遇到的问题及解决方案。
+## Plans Not Showing
 
-## 安装问题
+**Plans are not appearing in the sidebar.**
 
-### Rust 安装失败
+1. **Check the plans directory.** By default the extension reads from `~/.claude/plans`. Verify the folder exists and contains `.md` files.
 
-**问题**: 运行 `rustc --version` 提示命令未找到。
+2. **Custom directory setting.** If you set `planViewer.plansDirectory`, make sure the path is correct and absolute. Relative paths are not supported.
 
-**解决方案**:
-1. 确认 Rust 已正确安装
-2. 重启终端或重新加载环境变量
-3. 检查 PATH 是否包含 Rust 的 bin 目录
+3. **Refresh manually.** Click the `↺` (Refresh) button in the Plans sidebar toolbar.
 
-::: details Windows PATH 设置
-```
-%USERPROFILE%\.cargo\bin
-%USERPROFILE%\.rustup\toolchains\stable-x86_64-pc-windows-msvc\bin
-```
-:::
+4. **File extension.** Only `.md` files are listed. Other formats (`.txt`, `.markdown`) are ignored.
 
-### pnpm 安装缓慢
+---
 
-**问题**: `pnpm install` 执行很慢。
+## Comments Not Saving
 
-**解决方案**:
-配置国内镜像源：
+**I added a comment but it disappeared after restarting VS Code.**
 
-```bash
-pnpm config set registry https://registry.npmmirror.com
-```
+Comments are stored in VS Code's `globalState`. This is tied to the workspace/machine. If you opened a different workspace, comments for plans in the previous workspace remain but may not be visible.
 
-### Windows 构建失败
+If comments vanish entirely, check that the extension is still installed and active by searching for "Plan Viewer" in the Extensions panel.
 
-**问题**: 出现链接器错误。
+---
 
-**解决方案**:
-1. 确认安装了 Visual Studio Build Tools
-2. 选择 "Desktop development with C++" 工作负载
-3. 重启电脑后重试
+## Embedded Comments Missing
 
-## 运行时问题
+**`embedCommentsInMarkdown` is enabled but I don't see comments in the `.md` file.**
 
-### WebView2 未找到
+The sync happens when a plan is **loaded** (clicked in the sidebar). Open the plan in Plan Viewer, then check the `.md` file in your editor — it should contain a `## 📝 Review Comments` section at the bottom.
 
-**问题**: Windows 上提示 WebView2 未安装。
+If the section still doesn't appear, ensure the extension has write access to the plans directory.
 
-**解决方案**:
-- Windows 10/11 通常已预装
-- 手动下载：[WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)
+---
 
-### 计划文件不显示
+## Mermaid Diagrams Not Rendering
 
-**问题**: Plan Viewer 打开后列表为空。
+**Mermaid code blocks show as plain text.**
 
-**解决方案**:
-1. 确认 `~/.claude/plans/` 目录存在
-2. 检查目录中是否有 `.md` 文件
-3. 查看控制台是否有错误信息
+Mermaid is loaded lazily. If the diagram hasn't appeared after a couple of seconds:
 
-### Mermaid 图表不渲染
+1. Scroll the diagram into view (lazy rendering is viewport-based)
+2. Check the browser console in the VS Code Developer Tools (`Help → Toggle Developer Tools`) for errors
+3. Verify the Mermaid syntax is valid using the [Mermaid Live Editor](https://mermaid.live)
 
-**问题**: Mermaid 代码块显示为普通代码。
+---
 
-**解决方案**:
-1. 检查网络连接（Mermaid 通过 CDN 加载）
-2. 检查代码块语法是否正确：
-   ```markdown
-   ```mermaid
-   graph TD
-       A --> B
-   ```
-   ```
+## Extension Not Activating
 
-### 文件监听不工作
+**The Plan Viewer icon doesn't appear in the Activity Bar.**
 
-**问题**: 修改计划文件后视图未更新。
+1. Confirm VS Code version ≥ 1.85.0 (`Help → About`)
+2. Open the Extensions panel and verify **Plan Viewer** is installed and **enabled** (not disabled)
+3. Reload VS Code (`Ctrl+Shift+P` → `Developer: Reload Window`)
 
-**解决方案**:
-1. 重启 Plan Viewer
-2. 检查文件权限
-3. 查看 Rust 后端日志
+---
 
-## 评论问题
+## Wrong Project Grouping
 
-### 评论无法保存
+**Plans are grouped under the wrong project or show as "Ungrouped".**
 
-**问题**: 添加评论后未写入文件。
+Project names are extracted from the plan file content using a priority fallback:
 
-**解决方案**:
-1. 检查文件是否有写入权限
-2. 确认磁盘空间充足
-3. 查看控制台错误信息
+1. `cwd:`, `Working directory:`, or `Project:` metadata line → path basename
+2. First absolute path found in the content
+3. First `# Heading` → text before `:` / `-` / `–`
+4. No match → `(Ungrouped)`
 
-### 评论格式错误
-
-**问题**: 评论显示异常。
-
-**解决方案**:
-确保评论格式正确：
+To fix grouping, add a metadata line at the top of the plan file:
 
 ```markdown
-### 💬 COMMENT (re: "Section Title")
-
-> 评论内容
-
-_— Reviewer, YYYY/MM/DD HH:MM_
+Working directory: /path/to/my-project
 ```
 
-## 性能问题
+Or toggle grouping **off** for a flat chronological list.
 
-### 应用启动慢
+---
 
-**可能原因**:
-- 首次启动需要编译 Rust 代码
-- 计划文件过多
+## How Do I Change the Plans Directory?
 
-**解决方案**:
-- 使用 `pnpm tauri build` 构建发布版本
-- 定期清理旧计划文件
+Open VS Code Settings (`Ctrl+,`), search for `planViewer.plansDirectory`, and enter the full path. Leave it empty to revert to the default `~/.claude/plans`.
 
-### 内存占用高
+---
 
-**可能原因**:
-- 大型 Mermaid 图表
-- 过多的文件监听
+## Can I Use Plan Viewer Without Claude Code?
 
-**解决方案**:
-- 关闭不需要的计划
-- 重启应用释放内存
+Yes. Plan Viewer reads any `.md` files from the configured directory. It works with plans created by any tool, not just Claude Code.
 
-## 其他问题
+---
 
-### 如何更改窗口大小？
+## Reporting Issues
 
-编辑 `src-tauri/tauri.conf.json`：
-
-```json
-{
-  "app": {
-    "windows": [{
-      "width": 1400,
-      "height": 900
-    }]
-  }
-}
-```
-
-### 如何更改应用名称？
-
-编辑 `src-tauri/tauri.conf.json`：
-
-```json
-{
-  "productName": "Your App Name"
-}
-```
-
-### 如何查看调试日志？
-
-开发模式下，日志会输出到终端。也可以在应用中按 `F12` 打开开发者工具。
-
-## 获取帮助
-
-如果以上方案都无法解决问题：
-
-1. 查看 [GitHub Issues](https://github.com/mekalz/plan_viewer/issues)
-2. 提交新的 Issue，包含：
-   - 操作系统和版本
-   - 错误信息截图
-   - 复现步骤
+Found a bug or have a feature request? Open an issue on [GitHub](https://github.com/anthropic-community/plan-viewer-vscode/issues).

@@ -1,106 +1,116 @@
-# 评论系统
+# Comment System
 
-Plan Viewer 提供了强大的评论系统，支持两种评论方式：章节级评论和文本选择内联评论。
+The comment system is the core feature of Plan Viewer. It lets you annotate any part of a plan without modifying the plan itself — or, optionally, by embedding comments directly into the Markdown file.
 
-## 评论类型
+## Comment Types
 
-### 章节级评论
+Five comment types cover the most common review scenarios:
 
-点击任意标题旁边的 `+` 按钮，可以为整个章节添加评论。
+| Type | Emoji | Purpose |
+|---|---|---|
+| **Comment** | 💬 | General observation or note |
+| **Suggestion** | 💡 | Propose a specific change or improvement |
+| **Question** | ❓ | Ask for clarification from the plan author |
+| **Approve** | ✅ | Explicitly sign off on a section |
+| **Reject** | ❌ | Mark a section as needing revision |
 
-评论会以以下格式添加到计划文件中：
+## Adding Comments
+
+### Section Comments
+
+Every section heading in the Markdown pane has a **`+`** button on its right edge. Click it to open an inline comment form for that section:
+
+1. A textarea appears below the heading
+2. Type your comment
+3. Select a type from the dropdown
+4. Press `Ctrl+Enter` (`Cmd+Enter` on macOS) or click **Submit**
+
+If the section already has comments, the button shows the count (e.g., `3`) instead of `+`.
+
+### Text-Selection Comments
+
+1. Select any text in the Markdown pane
+2. A **💬 Comment** floating tooltip appears above the selection
+3. Click the tooltip to open a comment form
+4. The selected text is pre-filled as context (truncated to 60 characters)
+
+## Data Structure
+
+Each comment stores:
+
+```typescript
+{
+  id: string           // UUID
+  planId: string       // plan file path
+  lineNumber: number | null
+  lineContent: string  // line where the comment is anchored
+  sectionTitle: string // heading the comment belongs to
+  selectedText: string // highlighted text (empty for section comments)
+  text: string         // comment body
+  type: 'comment' | 'suggestion' | 'question' | 'approve' | 'reject'
+  status: 'pending'
+  createdAt: string    // ISO 8601
+}
+```
+
+## Storage: Dual-Write
+
+Comments are stored in **two locations** simultaneously.
+
+### Primary: VS Code globalState
+
+Always enabled. Comments are serialised to JSON in VS Code's `globalState` under the key `planViewer.comments.<planId>`. This is fast and survives restarts.
+
+### Secondary: Embedded Markdown (optional)
+
+Controlled by the `planViewer.embedCommentsInMarkdown` setting (default: **enabled**).
+
+When enabled, each comment is written as a Markdown block into the plan file under a `## 📝 Review Comments` section at the bottom:
 
 ```markdown
----
-
 ## 📝 Review Comments
 
-### 💬 COMMENT (re: "Database Design")
+### 💡 SUGGESTION (on: "the proposed approach") [Line 15]
 
-> Consider using a composite index on (user_id, created_at)
-> for the sessions table to optimize timeline queries.
+> Consider breaking this into three phases for easier tracking.
 
-_— Reviewer, 2026/01/15 15:30_
+_— Reviewer, 2024/06/15 10:30_
+
+---
+
+### ❓ QUESTION [Line 42]
+
+> What's the expected latency for the sync step?
+
+_— Reviewer, 2024/06/15 10:32_
 ```
 
-### 内联评论
+This makes comments **portable** — they travel with the `.md` file and are readable without VS Code.
 
-选择任意文本后，可以添加针对该文本的内联评论：
+## Bidirectional Sync
 
-```markdown
-### 💬 COMMENT (on: "JWT-based session management")
+Every time a plan is loaded, `commentSync` reconciles the two storage locations:
 
-> Have we considered token revocation strategies for compromised tokens?
+- Comments in `globalState` but not in the Markdown → injected into the file (if `embedCommentsInMarkdown` is on)
+- Comment blocks in the Markdown but not in `globalState` → imported back into `globalState`
 
-_— Reviewer, 2026/01/15 15:35_
-```
+This means the two sources can never permanently diverge, even if you edit the `.md` file manually or share it with someone else.
 
-## 评论工作流
+## Navigating Comments
 
-```mermaid
-flowchart LR
-    A[审阅计划] --> B{评论类型}
-    B -->|章节| C[点击 + 按钮]
-    B -->|内联| D[选择文本]
-    C --> E[输入评论]
-    D --> E
-    E --> F[保存到文件]
-    F --> G[Claude 读取]
-    G --> H[修改计划]
-    H --> A
-```
+Open the **Comment Panel** by clicking the **Comments** button or the 💬 badge in the toolbar. The panel:
 
-## 评论功能特性
+- Groups comments by section heading
+- Shows the comment type emoji, a text preview, and a relative timestamp
+- Lets you click any comment to scroll the Markdown pane to that section
+- Provides a 🗑 delete button per comment
 
-### 评论高亮
+## Deleting Comments
 
-被选中的带有评论的文本会被高亮显示，方便快速定位评论位置。
+Click the 🗑 icon on any comment card — either in the Comment Panel or in the inline card within the Markdown pane. A toast notification confirms the deletion, and the comment is removed from both storage locations.
 
-### 评论侧边栏
+## Configuration
 
-评论会显示在侧边栏中，包含：
-
-- 评论内容预览
-- 关联的上下文
-- 时间戳信息
-
-### 双向同步
-
-评论系统维护 JSON 元数据和 Markdown 块的双向同步：
-
-- UI 中的评论操作会同步到 Markdown
-- 直接编辑 Markdown 中的评论也会反映到 UI
-
-## Claude Code 集成
-
-### 如何让 Claude 读取评论
-
-在 Claude Code 中，告诉 Claude：
-
-> 检查计划文件中的审阅评论并处理它们
-
-Claude Code 会重新读取计划文件，看到你的评论，并进行相应的修改。
-
-### Claude 的回复格式
-
-当 Claude 处理完评论后，会在评论下方添加回复：
-
-```markdown
-**Claude's Response**: Good point. Updated the Database Design section
-to use a composite index. This should improve query performance for the
-user timeline queries.
-```
-
-## 最佳实践
-
-::: tip 清晰的评论
-评论应该清晰、具体，说明期望的修改方向。
-:::
-
-::: tip 一次处理
-建议在 Claude 处理完所有评论后再添加新评论，避免评论堆积。
-:::
-
-::: warning 评论累积
-评论会追加到计划文件中，多轮审阅后文件会增长。定期清理已处理的评论。
-:::
+| Setting | Default | Description |
+|---|---|---|
+| `planViewer.embedCommentsInMarkdown` | `true` | Write comments into the `.md` file |
