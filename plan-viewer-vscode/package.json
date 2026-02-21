@@ -1,0 +1,190 @@
+{
+  "name": "plan-viewer",
+  "displayName": "Plan Viewer",
+  "description": "View and review Claude Code plan files with inline commenting and Mermaid diagram support",
+  "version": "0.1.0",
+  "publisher": "anthropic-community",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anthropic-community/plan-viewer-vscode"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "keywords": [
+    "claude",
+    "plan",
+    "review",
+    "markdown",
+    "mermaid"
+  ],
+  "icon": "media/icon.png",
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "l10n": "./l10n",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "plan-viewer",
+          "title": "Plan Viewer",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "plan-viewer": [
+        {
+          "id": "planViewer.planList",
+          "name": "Plans"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "planViewer.openPlan",
+        "title": "Open Plan",
+        "category": "Plan Viewer"
+      },
+      {
+        "command": "planViewer.refresh",
+        "title": "Refresh Plans",
+        "category": "Plan Viewer",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "planViewer.openInEditor",
+        "title": "Open in Editor",
+        "category": "Plan Viewer",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "planViewer.openSettings",
+        "title": "Settings",
+        "category": "Plan Viewer",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "planViewer.toggleGrouping",
+        "title": "Toggle Project Grouping",
+        "category": "Plan Viewer",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "planViewer.expandAll",
+        "title": "Expand All Groups",
+        "category": "Plan Viewer",
+        "icon": "$(expand-all)"
+      },
+      {
+        "command": "planViewer.collapseAll",
+        "title": "Collapse All Groups",
+        "category": "Plan Viewer",
+        "icon": "$(collapse-all)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "planViewer.refresh",
+          "when": "view == planViewer.planList",
+          "group": "navigation"
+        },
+        {
+          "command": "planViewer.openSettings",
+          "when": "view == planViewer.planList"
+        },
+        {
+          "command": "planViewer.toggleGrouping",
+          "when": "view == planViewer.planList",
+          "group": "navigation"
+        },
+        {
+          "command": "planViewer.expandAll",
+          "when": "view == planViewer.planList",
+          "group": "navigation"
+        },
+        {
+          "command": "planViewer.collapseAll",
+          "when": "view == planViewer.planList",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "planViewer.openInEditor",
+          "when": "view == planViewer.planList"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Plan Viewer",
+      "properties": {
+        "planViewer.plansDirectory": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Custom path to plans directory. Leave empty to use default `~/.claude/plans`"
+        },
+        "planViewer.fontSize": {
+          "type": "number",
+          "default": 14,
+          "minimum": 10,
+          "maximum": 24,
+          "description": "Font size for plan content (px)"
+        },
+        "planViewer.lineHeight": {
+          "type": "number",
+          "default": 1.7,
+          "minimum": 1.2,
+          "maximum": 2.5,
+          "description": "Line height for plan content"
+        },
+        "planViewer.embedCommentsInMarkdown": {
+          "type": "boolean",
+          "default": true,
+          "description": "Write comments back into the plan Markdown file (## 📝 Review Comments section)"
+        },
+        "planViewer.groupByProject": {
+          "type": "boolean",
+          "default": true,
+          "description": "Group plans by project in the sidebar"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "npm run build:ext && npm run build:webview",
+    "build:ext": "node esbuild.mjs --production",
+    "build:webview": "cd src/webview && npx vite build",
+    "watch:ext": "node esbuild.mjs --watch",
+    "watch:webview": "cd src/webview && npx vite build --watch",
+    "dev": "concurrently \"npm:watch:ext\" \"npm:watch:webview\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src --ext ts,tsx",
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "^2.9.0",
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.0.0",
+    "concurrently": "^9.0.0",
+    "esbuild": "^0.27.3",
+    "highlight.js": "^11.11.0",
+    "marked": "^15.0.0",
+    "marked-highlight": "^2.2.0",
+    "mermaid": "^11.4.0",
+    "preact": "^10.24.0",
+    "typescript": "^5.5.0",
+    "vite": "^6.0.0",
+    "vitest": "^4.0.18"
+  }
+}
