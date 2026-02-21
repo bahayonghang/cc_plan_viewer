@@ -1,166 +1,116 @@
-# Plan Viewer - Justfile
-# Cross-platform command runner (requires: https://just.systems)
-# Install:
-#   Windows: winget install just
-#   macOS:   brew install just
-#   Linux:   cargo install just
+# Plan Viewer VSCode Extension - Justfile
+# VSCode 插件命令集
+# 安装 just: winget install just (Windows) | brew install just (macOS) | cargo install just (Linux)
 
-# Default recipe - show help
-default:
+# 默认：显示帮助
+default: help
+
+# 显示帮助信息
+help:
     @just --list
 
-# ===== DEPENDENCY MANAGEMENT =====
+# ===== 依赖管理 =====
 
-# Install Node.js dependencies
-install-deps:
-    @echo "📦 Installing Node.js dependencies..."
-    pnpm install
+# 安装扩展依赖
+install:
+    @echo "📦 Installing dependencies..."
+    cd plan-viewer-vscode && npm install
 
-# Check Rust version
-check-rust:
-    @echo "🦀 Checking Rust..."
-    @rustc --version
-    @cargo --version
+# ===== 开发 =====
 
-# Check Node.js version
-check-node:
-    @echo "📦 Checking Node.js..."
-    @node --version
-    @pnpm --version
+# 启动开发监听（扩展 + Webview 并行）
+dev:
+    @echo "🔧 Starting development watch..."
+    cd plan-viewer-vscode && npm run dev
 
-# Check all dependencies
-check-all: check-rust check-node
-    @echo "✅ All checks passed!"
+# ===== 构建 =====
 
-# Ensure Node.js dependencies are installed (private)
-# Uses pnpm's built-in check - it will skip if already up to date
-[private]
-ensure-node-deps:
-    @echo "🔍 Checking Node.js dependencies..."
-    pnpm install --prefer-offline
-    pnpm approve-builds
+# ===== 构建 =====
 
-# Ensure Rust toolchain is available (private)
-[private]
-ensure-rust:
-    @echo "🔍 Checking Rust toolchain..."
-    @rustc --version
-    @cargo --version
-    @echo "✅ Rust toolchain is available"
+# 构建并打包扩展（Unix）
+[unix]
+build:
+    @echo "🏗️  Building and packaging extension..."
+    cd plan-viewer-vscode && npm run package
+    mkdir -p outputs
+    mv plan-viewer-vscode/*.vsix outputs/
+    @echo "✅ Extension packaged → outputs/"
 
-# Ensure all dependencies for Tauri build (private)
-[private]
-ensure-tauri-deps: ensure-node-deps ensure-rust
-    @echo "✅ All Tauri dependencies ready"
+# 构建并打包扩展（Windows）
+[windows]
+build:
+    @echo "🏗️  Building and packaging extension..."
+    cd plan-viewer-vscode && npm run package
+    node -e "const fs=require('fs'),path=require('path');if(!fs.existsSync('outputs'))fs.mkdirSync('outputs');fs.readdirSync('plan-viewer-vscode').filter(f=>f.endsWith('.vsix')).forEach(f=>fs.renameSync(path.join('plan-viewer-vscode',f),path.join('outputs',f)));"
+    @echo "✅ Extension packaged → outputs/"
 
-# ===== TAURI MODE (Desktop app) =====
+# TypeScript 类型检查（不输出文件）
+type-check:
+    @echo "🔍 Running type check..."
+    cd plan-viewer-vscode && npx tsc --noEmit
 
-# Start Tauri development server
-tauri-dev: ensure-tauri-deps
-    @echo "🔧 Starting Tauri development..."
-    pnpm tauri dev
+# ===== 测试 =====
 
-# Build Tauri application
-tauri-build: ensure-tauri-deps
-    @echo "🏗️  Building Tauri application..."
-    pnpm tauri build
-    node scripts/copy-artifacts.cjs
+# 运行测试
+test:
+    @echo "🧪 Running tests..."
+    cd plan-viewer-vscode && npm test
 
-# Build Tauri application (debug mode)
-tauri-build-debug: ensure-tauri-deps
-    @echo "🔨 Building Tauri application (debug)..."
-    pnpm tauri build --debug
-    node scripts/copy-artifacts.cjs --debug
+# ===== 打包 =====
 
-# ===== VITE COMMANDS =====
+# 打包 .vsix（Unix）
+[unix]
+package:
+    @echo "🧩 Packaging VSCode extension..."
+    cd plan-viewer-vscode && npm install && npm run package
+    mkdir -p outputs
+    mv plan-viewer-vscode/*.vsix outputs/
+    @echo "✅ Extension packaged → outputs/"
 
-# Start Vite dev server (frontend only)
-vite-dev: ensure-node-deps
-    @echo "⚡ Starting Vite dev server..."
-    pnpm dev
+# 打包 .vsix（Windows）
+[windows]
+package:
+    @echo "🧩 Packaging VSCode extension..."
+    cd plan-viewer-vscode && npm install && npm run package
+    node -e "const fs=require('fs'),path=require('path');if(!fs.existsSync('outputs'))fs.mkdirSync('outputs');fs.readdirSync('plan-viewer-vscode').filter(f=>f.endsWith('.vsix')).forEach(f=>fs.renameSync(path.join('plan-viewer-vscode',f),path.join('outputs',f)));"
+    @echo "✅ Extension packaged → outputs/"
 
-# Build frontend only
-vite-build: ensure-node-deps
-    @echo "📦 Building frontend..."
-    pnpm build
+# ===== 文档 =====
 
-# Preview production build
-vite-preview: ensure-node-deps
-    @echo "👀 Previewing production build..."
-    pnpm preview
+# 启动文档站点（安装依赖 + 开发服务器）
+docs: docs-install docs-dev
 
-# ===== DOCS COMMANDS =====
+# 安装文档依赖
+docs-install:
+    @echo "📦 Installing docs dependencies..."
+    cd docs && npm install
 
-# Start VitePress dev server (documentation)
-docs-dev: ensure-node-deps
-    @echo "📚 Starting VitePress dev server..."
-    pnpm docs:dev
+# 启动文档开发服务器
+docs-dev:
+    @echo "📖 Starting docs dev server..."
+    cd docs && npm run dev
 
-# Build documentation
-docs-build: ensure-node-deps
-    @echo "📖 Building documentation..."
-    pnpm docs:build
+# 构建文档
+docs-build:
+    @echo "🏗️  Building docs..."
+    cd docs && npm run build
 
-# Preview documentation build
-docs-preview: ensure-node-deps
-    @echo "👀 Previewing documentation build..."
-    pnpm docs:preview
+# 预览文档构建结果
+docs-preview:
+    @echo "👁️  Previewing docs..."
+    cd docs && npm run preview
 
-# ===== VERSION MANAGEMENT =====
+# ===== 清理 =====
 
-# Sync all project versions to match package.json (single source of truth)
-sync-version:
-    node scripts/sync-version.cjs
-
-# Check version consistency without modifying files (strict CI mode)
-check-version:
-    node scripts/check-version.cjs
-
-# ===== CI COMMANDS =====
-
-# Run all CI checks (version sync, lint, type check, static analysis)
-ci: ensure-node-deps ensure-rust sync-version ci-frontend ci-rust
-    @echo "✅ All CI checks passed!"
-
-# Run frontend CI checks
-ci-frontend: ensure-node-deps
-    @echo "🔍 Running frontend CI checks..."
-    @echo "  → Building frontend (syntax & type check)..."
-    pnpm build
-    @echo "✅ Frontend checks passed!"
-
-# Run Rust CI checks
-ci-rust: ensure-rust
-    @echo "🔍 Running Rust CI checks..."
-    @echo "  → cargo check (syntax & type check)..."
-    cd src-tauri && cargo check --all-targets --all-features
-    @echo "  → cargo clippy (static analysis)..."
-    cd src-tauri && cargo clippy --all-targets --all-features -- -D warnings
-    @echo "  → cargo fmt --check (format check)..."
-    cd src-tauri && cargo fmt --check
-    @echo "✅ Rust checks passed!"
-
-# Fix Rust formatting issues
-ci-fix: ensure-rust
-    @echo "🔧 Fixing Rust formatting..."
-    cd src-tauri && cargo fmt
-    @echo "✅ Formatting fixed!"
-
-# ===== UTILITIES =====
-
-# Clean build artifacts
+# 清理构建产物（Unix）
 [unix]
 clean:
     @echo "🧹 Cleaning build artifacts..."
-    rm -rf dist/ src-tauri/target/ node_modules/ docs/.vitepress/dist/ docs/.vitepress/cache/
+    rm -rf plan-viewer-vscode/dist plan-viewer-vscode/dist-webview plan-viewer-vscode/node_modules outputs
     @echo "✨ Clean complete!"
 
-# Clean build artifacts (Windows)
+# 清理构建产物（Windows）
 [windows]
 clean:
     @echo "🧹 Cleaning build artifacts..."
-    node -e "const fs=require('fs');['dist','src-tauri/target','node_modules','docs/.vitepress/dist','docs/.vitepress/cache'].forEach(p=>{try{fs.rmSync(p,{recursive:true,force:true})}catch(e){}});console.log('✨ Clean complete!');"
-
-# List all recipes
-list:
-    @just --list
+    node -e "const fs=require('fs');['plan-viewer-vscode/dist','plan-viewer-vscode/dist-webview','plan-viewer-vscode/node_modules','outputs'].forEach(p=>{try{fs.rmSync(p,{recursive:true,force:true})}catch(e){}});console.log('✨ Clean complete!');"
