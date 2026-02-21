@@ -2,76 +2,105 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project Overview
+## Commands
 
-Plan Viewer is a Tauri 2.0 desktop app for viewing and reviewing Claude Code plan files (`~/.claude/plans/*.md`). Users can add section-level or text-selection comments that are written back into the plan Markdown file, enabling a feedback loop with Claude Code.
-
-## Development Commands
+All commands are run from the repository root via `just` (requires [just](https://just.systems)):
 
 ```bash
-# Install dependencies
-pnpm install
-
-# Full Tauri desktop app (frontend + Rust backend)
-just tauri-dev          # dev mode
-just tauri-build        # production build
-just tauri-build-debug  # debug build
-
-# Frontend only (degrades gracefully without Tauri)
-pnpm dev                # or: just vite-dev
-
-# Documentation site (VitePress)
-pnpm docs:dev
-
-# CI checks
-just ci                 # full: sync-version + frontend build + cargo check/clippy/fmt
-just ci-rust            # cargo check + clippy + fmt --check
-just ci-frontend        # vite build only
-just ci-fix             # auto-fix Rust formatting
-
-# Version management (package.json is source of truth)
-just sync-version       # propagate version to tauri.conf.json and Cargo.toml
-just check-version      # CI: verify version consistency without writing
+just install      # Install npm dependencies in plan-viewer-vscode/
+just dev          # Start watch mode (extension + webview in parallel)
+just build        # Production build (extension + webview)
+just type-check   # TypeScript check without emitting files (tsc --noEmit)
+just test         # Run tests (vitest)
+just package      # Build .vsix → outputs/
+just clean        # Remove dist/, dist-webview/, node_modules/, outputs/
 ```
+
+All npm scripts live in `plan-viewer-vscode/package.json` and can also be run directly with `cd plan-viewer-vscode && npm run <script>`.
 
 ## Architecture
 
-### Dual-Mode Frontend (Vanilla JS + Vite)
+This is a VSCode extension with two independently built processes that communicate via message passing.
 
-The frontend is vanilla ES module JavaScript with no framework. Libraries (marked, highlight.js, beautiful-mermaid) are loaded from CDN, not bundled.
+### Two Build Processes
 
-`src/main.js` bootstraps the app by attempting to import `@tauri-apps/api/core`. If successful, IPC calls go through Tauri's `invoke`; otherwise, it falls back to HTTP fetch, allowing frontend-only development with `pnpm dev`.
+**Extension Host** (`src/` → `dist/extension.js`): Built by esbuild (`esbuild.mjs`). Runs in Node.js, has access to the full VSCode API and filesystem.
 
-`src/app.js` contains all application logic in a single file:
-- **`api()` function** — unified API abstraction routing to Tauri IPC or HTTP
-- **`renderMarkdown()`** — parses markdown, wraps sections in `.md-section` divs, injects comment trigger buttons, detects and lazy-loads Mermaid diagrams
-- **Text selection highlighting** — uses TreeWalker to find and wrap commented text in `<mark>` elements
-- **Comment CRUD** — loadPlan, openCommentForm, submitGlobalComment, deleteComment
+**Webview** (`src/webview/` → `dist-webview/`): Built by Vite with Preact. Runs sandboxed in a browser-like iframe, can only communicate with the extension via `postMessage`.
 
-### Rust Backend (`src-tauri/src/main.rs`)
+### Message Protocol
 
-Four Tauri commands exposed to frontend: `get_plans`, `get_plan_by_id`, `add_comment_command`, `delete_comment_command`.
+`src/webview/lib/messageProtocol.ts` defines all typed messages between the two processes:
+- **Extension → Webview**: `loadPlan`, `planList`, `commentAdded`, `commentDeleted`, `configChanged`
+- **Webview → Extension**: `addComment`, `deleteComment`, `openPlan`, `requestPlanList`, `openInEditor`, `showToast`
 
-**File locations:**
-- Plans: `~/.claude/plans/*.md`
-- Comment sidecars: `~/.claude/plan-reviews/<name>.comments.json`
+The extension injects the initial plan into `window.__INITIAL_PLAN__` at webview creation time to avoid a race condition between webview load and the first `loadPlan` message.
 
-**Bidirectional comment sync** (`sync_comments_with_plan()`): On every `get_plan` call, comments are reconciled between the JSON sidecar and the embedded `## 📝 Review Comments` section in the plan Markdown file. Comments can be added/removed from either source.
+### Comment Storage (Dual Write)
 
-**Comment injection**: Inline comments (with `selected_text`) are inserted after the matching paragraph in the plan file. Section-level comments are appended to the Review Comments section at the bottom.
+Comments have two storage locations managed by `CommentService`:
+1. **Primary**: VSCode `globalState` (key: `planViewer.comments.<planId>`)
+2. **Optional**: Embedded directly into the plan `.md` file under a `## 📝 Review Comments` section (controlled by `planViewer.embedCommentsInMarkdown` config)
 
-### Theming
+On every `getPlan()` call, `commentSync.ts` runs a bidirectional sync: it reconciles JSON-stored comments with any comment blocks found in the Markdown content, so neither source can diverge.
 
-CSS custom properties with two themes (dark default, light). Theme state persisted in `localStorage`. Highlight.js and Mermaid themes are swapped via CDN URL replacement.
+### Comment Markdown Pipeline
 
-### Window Startup
+Four services handle comment ↔ Markdown conversion:
+- `commentBuilder.ts` — `Comment` object → Markdown block text
+- `commentInjector.ts` — inserts/removes Markdown blocks in `.md` files
+- `commentParser.ts` — parses `### 💬 COMMENT` blocks back to `Comment` objects
+- `commentSync.ts` — orchestrates bidirectional sync between JSON and Markdown
 
-The window starts with `visible: false` in `tauri.conf.json`. After `initApp()` completes rendering, it calls `getCurrentWindow().show()` to prevent white flash.
+### TreeView Grouping
 
-## Key Conventions
+`planTreeProvider.ts` implements a two-level tree:
+- **Top level**: `ProjectGroupItem` (folder icon) or flat `PlanTreeItem` list, toggled by `planViewer.toggleGrouping` command
+- **Second level**: `PlanTreeItem` leaves within each group
 
-- **Language**: Code comments and git commits in Chinese
-- **Version source of truth**: `package.json` — use `just sync-version` after bumping
-- **No file watcher**: Despite README mentions, `notify` crate is not included; refresh is manual
-- **Tauri capabilities**: Defined in `src-tauri/capabilities/default.json` — grants `core:default`, `core:window:allow-show`, `shell:allow-open`
-- **CSP disabled**: `security.csp` is null in `tauri.conf.json` to allow CDN script loading
+Project names are extracted by `extractProject()` in `planService.ts` with a 4-level fallback:
+1. `cwd:` / `Working directory:` / `Project:` metadata line → path basename
+2. First absolute path in content → basename
+3. First `# heading` → text before `:` / `-` / `–` (max 20 chars)
+4. Empty string → displayed as `(未分组)`
+
+Results are cached in-memory keyed by `planId:mtime` to avoid re-reading files on every refresh.
+
+### Key Configuration
+
+| Setting | Default | Description |
+|---|---|---|
+| `planViewer.plansDirectory` | `~/.claude/plans` | Where plan `.md` files are read from |
+| `planViewer.groupByProject` | `true` | Group sidebar by extracted project name |
+| `planViewer.embedCommentsInMarkdown` | `true` | Write comments back into `.md` files |
+| `planViewer.fontSize` | `14` | Webview font size (px) |
+| `planViewer.lineHeight` | `1.7` | Webview line height |
+
+### File Layout
+
+```
+plan-viewer-vscode/
+├── src/
+│   ├── extension.ts          # Activation, command registration
+│   ├── types.ts              # Shared interfaces (PlanInfo, Plan, Comment)
+│   ├── services/
+│   │   ├── planService.ts    # List/load plans, extractProject(), in-memory cache
+│   │   ├── commentService.ts # Add/delete comments, dual-write logic
+│   │   ├── commentSync.ts    # Bidirectional JSON ↔ Markdown sync
+│   │   ├── commentBuilder.ts # Comment → Markdown block
+│   │   ├── commentParser.ts  # Markdown block → Comment
+│   │   ├── commentInjector.ts# Inject/remove blocks in .md files
+│   │   └── fileWatcher.ts    # Auto-refresh on plan file changes (300ms debounce)
+│   ├── providers/
+│   │   ├── planTreeProvider.ts   # TreeDataProvider, ProjectGroupItem
+│   │   ├── planTreeItem.ts       # Individual plan TreeItem
+│   │   └── webviewPanelManager.ts# Singleton webview lifecycle, message routing
+│   └── webview/              # Preact frontend (separate Vite build)
+│       ├── App.tsx           # Root component, message handler
+│       ├── lib/
+│       │   └── messageProtocol.ts
+│       └── components/       # MarkdownViewer, CommentPanel, Toolbar, etc.
+└── l10n/
+    ├── bundle.l10n.json      # English strings
+    └── bundle.l10n.zh-cn.json# Chinese strings
+```
