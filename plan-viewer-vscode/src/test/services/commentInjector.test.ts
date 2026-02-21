@@ -76,7 +76,6 @@ describe('injectCommentIntoContent', () => {
 describe('removeCommentFromContent', () => {
   it('应移除评论块', () => {
     const comment = makeComment();
-    const content = `# Plan\n\n## 📝 Review Comments\n\n### 💬 COMMENT\n\n> Test comment\n\n_— Reviewer, 2024/06/15 10:30_\n\n`;
 
     // 先注入再移除，验证幂等性
     const injected = injectCommentIntoContent('# Plan\n\nSome content.', comment);

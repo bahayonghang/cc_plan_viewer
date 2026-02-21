@@ -5,7 +5,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { Comment, CommentData } from '../types';
 import { PlanService } from './planService';
-import { buildCommentBlock } from './commentBuilder';
 import { injectCommentIntoContent, removeCommentFromContent } from './commentInjector';
 import { generateCommentId } from './utils';
 
