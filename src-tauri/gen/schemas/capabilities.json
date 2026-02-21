@@ -1,1 +1,0 @@
-{"default":{"identifier":"default","description":"Default capabilities for Plan Viewer","local":true,"windows":["main"],"permissions":["core:default","core:window:allow-show","shell:allow-open"]}}
