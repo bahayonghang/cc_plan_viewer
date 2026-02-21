@@ -1,0 +1,56 @@
+name: Release
+
+# 推送 v* 格式 tag 时触发，例如 git tag v0.1.0 && git push origin v0.1.0
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write  # 允许创建 GitHub Release 并上传 asset
+
+jobs:
+  release:
+    name: Build & Publish VSCode Extension
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: plan-viewer-vscode/package-lock.json
+
+      - name: Install dependencies
+        run: npm install
+        working-directory: plan-viewer-vscode
+
+      - name: Build & package .vsix
+        run: npm run package
+        working-directory: plan-viewer-vscode
+
+      - name: Collect .vsix artifact
+        run: |
+          mkdir -p outputs
+          mv plan-viewer-vscode/*.vsix outputs/
+
+      - name: Read package version
+        id: pkg
+        run: |
+          VERSION=$(node -p "require('./plan-viewer-vscode/package.json').version")
+          echo "version=$VERSION"                 >> "$GITHUB_OUTPUT"
+          echo "vsix=outputs/plan-viewer-${VERSION}.vsix" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Plan Viewer v${{ steps.pkg.outputs.version }}"
+          tag_name: ${{ github.ref_name }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}  # v1.0.0-beta → prerelease
+          generate_release_notes: true
+          files: ${{ steps.pkg.outputs.vsix }}
