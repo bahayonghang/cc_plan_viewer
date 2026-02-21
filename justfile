@@ -25,8 +25,6 @@ dev:
 
 # ===== 构建 =====
 
-# ===== 构建 =====
-
 # 构建并打包扩展（Unix）
 [unix]
 build:
@@ -55,6 +53,17 @@ type-check:
 test:
     @echo "🧪 Running tests..."
     cd plan-viewer-vscode && npm test
+
+# ===== CI =====
+
+# 运行 CI 检查：类型检查 + 代码规范 + 测试（任一失败即中止）
+ci:
+    @echo "🚦 Running CI checks..."
+    cd plan-viewer-vscode && npm install
+    cd plan-viewer-vscode && npx tsc --noEmit
+    cd plan-viewer-vscode && npm run lint
+    cd plan-viewer-vscode && npm test
+    @echo "✅ All CI checks passed!"
 
 # ===== 打包 =====
 
