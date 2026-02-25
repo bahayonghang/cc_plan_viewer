@@ -2,7 +2,7 @@
   "name": "plan-viewer",
   "displayName": "Plan Viewer",
   "description": "View and review Claude Code plan files with inline commenting and Mermaid diagram support",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "publisher": "anthropic-community",
   "license": "MIT",
   "repository": {
@@ -70,22 +70,10 @@
         "icon": "$(gear)"
       },
       {
-        "command": "planViewer.toggleGrouping",
-        "title": "Toggle Project Grouping",
+        "command": "planViewer.setTimeFilter",
+        "title": "Filter by Time",
         "category": "Plan Viewer",
-        "icon": "$(list-tree)"
-      },
-      {
-        "command": "planViewer.expandAll",
-        "title": "Expand All Groups",
-        "category": "Plan Viewer",
-        "icon": "$(expand-all)"
-      },
-      {
-        "command": "planViewer.collapseAll",
-        "title": "Collapse All Groups",
-        "category": "Plan Viewer",
-        "icon": "$(collapse-all)"
+        "icon": "$(filter)"
       }
     ],
     "menus": {
@@ -100,17 +88,7 @@
           "when": "view == planViewer.planList"
         },
         {
-          "command": "planViewer.toggleGrouping",
-          "when": "view == planViewer.planList",
-          "group": "navigation"
-        },
-        {
-          "command": "planViewer.expandAll",
-          "when": "view == planViewer.planList",
-          "group": "navigation"
-        },
-        {
-          "command": "planViewer.collapseAll",
+          "command": "planViewer.setTimeFilter",
           "when": "view == planViewer.planList",
           "group": "navigation"
         }
@@ -149,10 +127,22 @@
           "default": true,
           "description": "Write comments back into the plan Markdown file (## 📝 Review Comments section)"
         },
-        "planViewer.groupByProject": {
-          "type": "boolean",
-          "default": true,
-          "description": "Group plans by project in the sidebar"
+        "planViewer.defaultFilterDays": {
+          "type": "number",
+          "default": 3,
+          "enum": [
+            3,
+            7,
+            30,
+            0
+          ],
+          "enumDescriptions": [
+            "Show plans from last 3 days",
+            "Show plans from last 7 days",
+            "Show plans from last 30 days",
+            "Show all plans"
+          ],
+          "description": "Default time filter for the plan list (0 = show all)"
         }
       }
     }
