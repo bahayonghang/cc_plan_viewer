@@ -3,7 +3,7 @@
 import * as vscode from 'vscode';
 import { PlanService } from './services/planService';
 import { CommentService } from './services/commentService';
-import { PlanTreeDataProvider } from './providers/planTreeProvider';
+import { PlanTreeDataProvider, FilterDays } from './providers/planTreeProvider';
 import { WebviewPanelManager } from './providers/webviewPanelManager';
 import { FileWatcher } from './services/fileWatcher';
 
@@ -12,6 +12,11 @@ let commentService: CommentService;
 let treeProvider: PlanTreeDataProvider;
 let webviewManager: WebviewPanelManager;
 let fileWatcher: FileWatcher;
+
+/** 更新 TreeView 描述显示当前过滤状态 */
+function updateTreeViewDescription(treeView: vscode.TreeView<vscode.TreeItem>) {
+  treeView.description = treeProvider.getFilterLabel();
+}
 
 export function activate(context: vscode.ExtensionContext) {
   console.log('[Plan Viewer] 扩展已激活');
@@ -28,6 +33,9 @@ export function activate(context: vscode.ExtensionContext) {
     showCollapseAll: false,
   });
   context.subscriptions.push(treeView);
+
+  // 初始显示过滤状态
+  updateTreeViewDescription(treeView);
 
   // 文件监听器：自动刷新列表和 Webview
   fileWatcher = new FileWatcher(planService.getPlansDir(), () => {
@@ -62,19 +70,27 @@ export function activate(context: vscode.ExtensionContext) {
       vscode.commands.executeCommand('workbench.action.openSettings', 'planViewer');
     }),
 
-    // 切换项目分组
-    vscode.commands.registerCommand('planViewer.toggleGrouping', async () => {
-      await treeProvider.toggleGrouping();
-    }),
-
-    // 展开所有项目组（通过 treeView.reveal 强制展开，绕过 VSCode 内部状态缓存）
-    vscode.commands.registerCommand('planViewer.expandAll', async () => {
-      await treeProvider.expandAll(treeView);
-    }),
-
-    // 折叠所有项目组（委托给 VSCode 内置命令，正确重置内部状态）
-    vscode.commands.registerCommand('planViewer.collapseAll', () => {
-      treeProvider.collapseAll();
+    // 时间过滤
+    vscode.commands.registerCommand('planViewer.setTimeFilter', async () => {
+      const current = treeProvider.getFilterDays();
+      const options: { label: string; value: FilterDays; description?: string }[] = [
+        { label: '$(calendar) Recent 3 days', value: 3 },
+        { label: '$(calendar) Recent 7 days', value: 7 },
+        { label: '$(calendar) Recent 30 days', value: 30 },
+        { label: '$(list-unordered) All plans', value: 0 },
+      ];
+      // 标记当前选中项
+      const items = options.map(opt => ({
+        ...opt,
+        description: opt.value === current ? '✓ current' : undefined,
+      }));
+      const picked = await vscode.window.showQuickPick(items, {
+        placeHolder: 'Select time range to show',
+      });
+      if (picked) {
+        await treeProvider.setFilter(picked.value);
+        updateTreeViewDescription(treeView);
+      }
     }),
   );
 
