@@ -16,7 +16,7 @@ hero:
 features:
   - icon: 📋
     title: Smart Plan Browser
-    details: Automatically discovers .md plan files from ~/.claude/plans and organizes them by project name in a sidebar tree view, sorted by modification time.
+    details: Automatically discovers .md plan files from ~/.claude/plans and organizes them by project name. Lists feature cleaned-up plan names and dynamic colorful icons based on the plan's type (e.g., Fix, Feature).
 
   - icon: 💬
     title: Inline Comment System

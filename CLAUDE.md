@@ -93,7 +93,7 @@ plan-viewer-vscode/
 │   │   └── fileWatcher.ts    # Auto-refresh on plan file changes (300ms debounce)
 │   ├── providers/
 │   │   ├── planTreeProvider.ts   # TreeDataProvider, ProjectGroupItem
-│   │   ├── planTreeItem.ts       # Individual plan TreeItem
+│   │   ├── planTreeItem.ts       # Individual plan TreeItem with dynamic ThemeIcon colors
 │   │   └── webviewPanelManager.ts# Singleton webview lifecycle, message routing
 │   └── webview/              # Preact frontend (separate Vite build)
 │       ├── App.tsx           # Root component, message handler

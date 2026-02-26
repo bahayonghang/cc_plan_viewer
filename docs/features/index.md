@@ -16,8 +16,9 @@ Plan Viewer is purpose-built for reviewing Claude Code plan files inside VS Code
 ### Plan Discovery
 - Reads `.md` files from `~/.claude/plans` (configurable)
 - Extracts project names from plan content for automatic grouping
+- Auto-extracts simplified names and renders dynamic colorful icons for listing components
 - Sorted by modification time, newest first
-- Flat or grouped sidebar view, toggleable via toolbar
+- Toggle OpenSpec ↔ Claude Plans views with quick switch icon
 
 ### Inline Reviewing
 - Section-level and text-selection comment triggers
