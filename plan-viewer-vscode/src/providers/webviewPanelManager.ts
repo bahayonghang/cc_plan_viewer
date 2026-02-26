@@ -194,6 +194,22 @@ export class WebviewPanelManager {
         break;
       }
 
+      case 'updateComment': {
+        const updated = await this.commentService.updateComment(
+          msg.planId,
+          msg.commentId,
+          msg.text,
+          msg.commentType,
+        );
+        if (updated) {
+          this.panel?.webview.postMessage({
+            type: 'commentUpdated',
+            comment: updated,
+          });
+        }
+        break;
+      }
+
       case 'openPlan': {
         await this.openPlan(msg.planId);
         break;

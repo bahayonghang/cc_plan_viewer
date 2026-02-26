@@ -1,6 +1,6 @@
 // ── Webview ↔ Extension Host 消息协议 ─────────────────────
 
-import type { Plan, Comment, CommentData, PlanInfo } from '../../types';
+import type { Plan, Comment, CommentData, CommentType, PlanInfo } from '../../types';
 
 // ── Extension → Webview ──────────────────────────────────
 
@@ -35,6 +35,11 @@ export interface CommentDeletedMessage {
   commentId: string;
 }
 
+export interface CommentUpdatedMessage {
+  type: 'commentUpdated';
+  comment: Comment;
+}
+
 export interface ConfigChangedMessage {
   type: 'configChanged';
   config: WebviewConfig;
@@ -46,6 +51,7 @@ export type ExtensionToWebviewMessage =
   | PlanListMessage
   | CommentAddedMessage
   | CommentDeletedMessage
+  | CommentUpdatedMessage
   | ConfigChangedMessage;
 
 // ── Webview → Extension ──────────────────────────────────
@@ -60,6 +66,14 @@ export interface DeleteCommentMessage {
   type: 'deleteComment';
   planId: string;
   commentId: string;
+}
+
+export interface UpdateCommentMessage {
+  type: 'updateComment';
+  planId: string;
+  commentId: string;
+  text: string;
+  commentType: CommentType;
 }
 
 export interface OpenPlanMessage {
@@ -89,6 +103,7 @@ export interface ShowToastMessage {
 export type WebviewToExtensionMessage =
   | AddCommentMessage
   | DeleteCommentMessage
+  | UpdateCommentMessage
   | OpenPlanMessage
   | RequestPlanListMessage
   | OpenInEditorMessage

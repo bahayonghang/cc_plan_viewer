@@ -19,7 +19,7 @@ export class CommentService {
   constructor(
     private readonly context: vscode.ExtensionContext,
     private readonly planService: PlanService,
-  ) {}
+  ) { }
 
   /** 添加评论 */
   async addComment(planId: string, data: CommentData): Promise<Comment | null> {
@@ -75,6 +75,36 @@ export class CommentService {
     }
 
     return true;
+  }
+
+  /** 编辑评论（更新文本和类型，保持 id / createdAt 不变） */
+  async updateComment(
+    planId: string,
+    commentId: string,
+    newText: string,
+    newType: import('../types').CommentType,
+  ): Promise<import('../types').Comment | null> {
+    const comments = this.planService.loadComments(planId);
+    const idx = comments.findIndex(c => c.id === commentId);
+
+    if (idx === -1) return null;
+
+    const oldComment = comments[idx];
+    const updated: Comment = { ...oldComment, text: newText, type: newType };
+    comments[idx] = updated;
+    this.planService.saveComments(planId, comments);
+
+    // 可选: 同步更新 Markdown 文件（移除旧块 → 注入新块）
+    const embedEnabled = vscode.workspace
+      .getConfiguration('planViewer')
+      .get<boolean>('embedCommentsInMarkdown', true);
+
+    if (embedEnabled) {
+      await this.removeCommentFromFile(planId, oldComment);
+      await this.injectCommentIntoFile(planId, updated);
+    }
+
+    return updated;
   }
 
   // ── 文件操作 ────────────────────────────────────────

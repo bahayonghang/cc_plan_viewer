@@ -93,6 +93,21 @@ export function App() {
           });
           break;
 
+        case 'commentUpdated':
+          setState(prev => {
+            if (!prev.plan) return prev;
+            return {
+              ...prev,
+              plan: {
+                ...prev.plan,
+                comments: prev.plan.comments.map(c =>
+                  c.id === msg.comment.id ? msg.comment : c
+                ),
+              },
+            };
+          });
+          break;
+
         case 'configChanged':
           document.documentElement.style.setProperty('--user-font-size', `${msg.config.fontSize}px`);
           document.documentElement.style.setProperty('--user-line-height', `${msg.config.lineHeight}`);
