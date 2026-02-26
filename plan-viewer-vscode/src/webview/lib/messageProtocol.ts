@@ -9,6 +9,17 @@ export interface LoadPlanMessage {
   plan: Plan;
 }
 
+export interface LoadArtifactMessage {
+  type: 'loadArtifact';
+  artifact: {
+    name: string;
+    path: string;
+    content: string;
+    changeId: string;
+    artifactType: string;
+  };
+}
+
 export interface PlanListMessage {
   type: 'planList';
   plans: PlanInfo[];
@@ -31,6 +42,7 @@ export interface ConfigChangedMessage {
 
 export type ExtensionToWebviewMessage =
   | LoadPlanMessage
+  | LoadArtifactMessage
   | PlanListMessage
   | CommentAddedMessage
   | CommentDeletedMessage
@@ -64,6 +76,11 @@ export interface OpenInEditorMessage {
   planId: string;
 }
 
+export interface OpenArtifactMessage {
+  type: 'openArtifact';
+  artifactPath: string;
+}
+
 export interface ShowToastMessage {
   type: 'showToast';
   message: string;
@@ -75,6 +92,7 @@ export type WebviewToExtensionMessage =
   | OpenPlanMessage
   | RequestPlanListMessage
   | OpenInEditorMessage
+  | OpenArtifactMessage
   | ShowToastMessage;
 
 // ── 配置 ────────────────────────────────────────────────

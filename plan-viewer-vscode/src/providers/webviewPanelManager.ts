@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { PlanService } from '../services/planService';
 import { CommentService } from '../services/commentService';
+import { OpenSpecService } from '../services/openspecService';
 import type { WebviewToExtensionMessage, WebviewConfig } from '../webview/lib/messageProtocol';
 import type { Plan } from '../types';
 
@@ -14,6 +15,7 @@ import type { Plan } from '../types';
  * - 创建/复用 WebviewPanel（单例模式）
  * - CSP 配置和资源 URI 映射
  * - Extension ↔ Webview 消息路由
+ * - Plan 和 OpenSpec Artifact 的渲染
  */
 export class WebviewPanelManager {
   private panel: vscode.WebviewPanel | undefined;
@@ -23,7 +25,8 @@ export class WebviewPanelManager {
     private readonly context: vscode.ExtensionContext,
     private readonly planService: PlanService,
     private readonly commentService: CommentService,
-  ) {}
+    private readonly openspecService: OpenSpecService,
+  ) { }
 
   /** 当前面板是否可见 */
   get isVisible(): boolean {
@@ -49,6 +52,52 @@ export class WebviewPanelManager {
       // 首次创建：将初始数据注入 HTML，避免竞争条件
       this.panel = this.createPanel(plan);
       this.panel.title = `📋 ${plan.name}`;
+    }
+  }
+
+  /** 打开 OpenSpec Artifact */
+  async openArtifact(artifactPath: string): Promise<void> {
+    const content = await this.openspecService.getArtifact(artifactPath);
+    if (!content) {
+      vscode.window.showWarningMessage(`Artifact not found: ${artifactPath}`);
+      return;
+    }
+
+    const fileName = path.basename(artifactPath);
+    // 推断 changeId：从路径中提取
+    const changeId = this.extractChangeId(artifactPath);
+    // 推断 artifactType
+    const typeMap: Record<string, string> = {
+      'proposal.md': 'proposal',
+      'design.md': 'design',
+      'tasks.md': 'tasks',
+    };
+    const artifactType = typeMap[fileName] ?? 'spec';
+
+    this.currentPlanId = undefined;
+
+    const artifact = { name: fileName, path: artifactPath, content, changeId, artifactType };
+
+    if (this.panel) {
+      this.panel.reveal(vscode.ViewColumn.One);
+      this.panel.title = `📦 ${changeId ? `${changeId}/${fileName}` : fileName}`;
+      this.panel.webview.postMessage({ type: 'loadArtifact', artifact });
+    } else {
+      // 首次创建面板时用空 plan 初始化，然后发送 artifact
+      const emptyPlan: Plan = {
+        id: '__artifact__',
+        name: fileName,
+        path: artifactPath,
+        content: '',
+        modified: new Date().toISOString(),
+        comments: [],
+      };
+      this.panel = this.createPanel(emptyPlan);
+      this.panel.title = `📦 ${changeId ? `${changeId}/${fileName}` : fileName}`;
+      // 面板创建后立即发送 artifact
+      setTimeout(() => {
+        this.panel?.webview.postMessage({ type: 'loadArtifact', artifact });
+      }, 100);
     }
   }
 
@@ -160,6 +209,11 @@ export class WebviewPanelManager {
         break;
       }
 
+      case 'openArtifact': {
+        await this.openArtifact(msg.artifactPath);
+        break;
+      }
+
       case 'showToast': {
         vscode.window.showInformationMessage(msg.message);
         break;
@@ -174,6 +228,17 @@ export class WebviewPanelManager {
         break;
       }
     }
+  }
+
+  /** 从 artifact 路径提取 changeId */
+  private extractChangeId(artifactPath: string): string {
+    // 路径形如 .../openspec/changes/<changeId>/proposal.md
+    const parts = artifactPath.replace(/\\/g, '/').split('/');
+    const changesIdx = parts.indexOf('changes');
+    if (changesIdx >= 0 && changesIdx + 1 < parts.length) {
+      return parts[changesIdx + 1];
+    }
+    return '';
   }
 
   private getConfig(): WebviewConfig {

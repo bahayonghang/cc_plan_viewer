@@ -17,6 +17,13 @@ declare global {
 
 interface AppState {
   plan: Plan | null;
+  artifact: {
+    name: string;
+    path: string;
+    content: string;
+    changeId: string;
+    artifactType: string;
+  } | null;
   panelOpen: boolean;
   commentFormTarget: string | null;   // section title for active comment form
   selectedTextTarget: string | null;  // selected text for text-selection comment
@@ -40,6 +47,19 @@ export function App() {
           setState(prev => ({
             ...prev,
             plan: msg.plan,
+            artifact: null,
+            commentFormTarget: null,
+            selectedTextTarget: null,
+          }));
+          break;
+
+        case 'loadArtifact':
+          // @ts-expect-error - artifact type is in updated message protocol
+          setState(prev => ({
+            ...prev,
+            plan: null,
+            artifact: msg.artifact,
+            panelOpen: false, // 强制关闭评论面板
             commentFormTarget: null,
             selectedTextTarget: null,
           }));
@@ -114,7 +134,7 @@ export function App() {
   }, []);
 
   // 空状态
-  if (!state.plan) {
+  if (!state.plan && !state.artifact) {
     return (
       <div class="app">
         <EmptyState />
@@ -122,7 +142,45 @@ export function App() {
     );
   }
 
-  const { plan, panelOpen, commentFormTarget, selectedTextTarget } = state;
+  const { plan, artifact, panelOpen, commentFormTarget, selectedTextTarget } = state;
+
+  // Artifact 渲染模式
+  if (artifact) {
+    return (
+      <div class="app">
+        <Toolbar
+          planName={artifact.name}
+          commentCount={0}
+          onTogglePanel={handleTogglePanel}
+          panelOpen={false}
+          artifactProps={{
+            isArtifact: true,
+            changeId: artifact.changeId,
+            path: artifact.path
+          }}
+        />
+
+        <div class="split-view">
+          <MarkdownViewer
+            content={artifact.content}
+            comments={[]}
+            planId={artifact.path}
+            commentFormTarget={null}
+            selectedTextTarget={null}
+            onOpenCommentForm={() => { }}
+            onOpenSelectionComment={() => { }}
+            onCloseCommentForm={() => { }}
+          // @ts-expect-error - we can add a readonly prop to MarkdownViewer if needed, 
+          // but empty comments/handlers basically make it readonly
+          />
+        </div>
+        <Toast />
+      </div>
+    );
+  }
+
+  // Plan 渲染模式
+  if (!plan) return null;
 
   return (
     <div class="app">

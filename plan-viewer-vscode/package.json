@@ -2,7 +2,7 @@
   "name": "plan-viewer",
   "displayName": "Plan Viewer",
   "description": "View and review Claude Code plan files with inline commenting and Mermaid diagram support",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "publisher": "anthropic-community",
   "license": "MIT",
   "repository": {
@@ -21,7 +21,8 @@
     "plan",
     "review",
     "markdown",
-    "mermaid"
+    "mermaid",
+    "openspec"
   ],
   "icon": "media/icon.png",
   "activationEvents": [],
@@ -52,8 +53,19 @@
         "category": "Plan Viewer"
       },
       {
+        "command": "planViewer.openArtifact",
+        "title": "Open OpenSpec Artifact",
+        "category": "Plan Viewer"
+      },
+      {
+        "command": "planViewer.switchMode",
+        "title": "Switch Mode (Plans/OpenSpec)",
+        "category": "Plan Viewer",
+        "icon": "$(symbol-enum)"
+      },
+      {
         "command": "planViewer.refresh",
-        "title": "Refresh Plans",
+        "title": "Refresh",
         "category": "Plan Viewer",
         "icon": "$(refresh)"
       },
@@ -79,24 +91,29 @@
     "menus": {
       "view/title": [
         {
+          "command": "planViewer.switchMode",
+          "when": "view == planViewer.planList",
+          "group": "navigation@1"
+        },
+        {
+          "command": "planViewer.setTimeFilter",
+          "when": "view == planViewer.planList && planViewer.mode == plans",
+          "group": "navigation@2"
+        },
+        {
           "command": "planViewer.refresh",
           "when": "view == planViewer.planList",
-          "group": "navigation"
+          "group": "navigation@3"
         },
         {
           "command": "planViewer.openSettings",
           "when": "view == planViewer.planList"
-        },
-        {
-          "command": "planViewer.setTimeFilter",
-          "when": "view == planViewer.planList",
-          "group": "navigation"
         }
       ],
       "view/item/context": [
         {
           "command": "planViewer.openInEditor",
-          "when": "view == planViewer.planList"
+          "when": "view == planViewer.planList && viewItem == planItem"
         }
       ]
     },
@@ -107,6 +124,11 @@
           "type": "string",
           "default": "",
           "markdownDescription": "Custom path to plans directory. Leave empty to use default `~/.claude/plans`"
+        },
+        "planViewer.openspecDirectory": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Custom path to OpenSpec directory. Leave empty to auto-detect `openspec/` in workspace root"
         },
         "planViewer.fontSize": {
           "type": "number",

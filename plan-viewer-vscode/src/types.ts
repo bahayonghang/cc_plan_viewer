@@ -1,5 +1,31 @@
 // ── 共享类型定义 ────────────────────────────────────────────
 
+/** 侧边栏模式 */
+export type SidebarMode = 'plans' | 'openspec';
+
+/** OpenSpec Artifact 类型 */
+export type OpenSpecArtifactType = 'proposal' | 'design' | 'tasks' | 'spec' | 'other';
+
+/** OpenSpec 变更信息 */
+export interface OpenSpecChange {
+  id: string;           // 变更目录名
+  path: string;         // 完整路径
+  hasProposal: boolean;
+  hasDesign: boolean;
+  hasTasks: boolean;
+  hasSpecs: boolean;
+  taskProgress?: { done: number; total: number };
+}
+
+/** OpenSpec Artifact 文件信息 */
+export interface OpenSpecArtifact {
+  name: string;         // 文件名 (proposal.md, design.md, etc.)
+  path: string;         // 完整路径
+  changeId: string;     // 所属变更 ID
+  modified: string;     // ISO 8601
+  type: OpenSpecArtifactType;
+}
+
 /** 评论类型枚举 */
 export type CommentType = 'comment' | 'suggestion' | 'question' | 'approve' | 'reject';
 

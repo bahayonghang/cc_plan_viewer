@@ -3,19 +3,29 @@
 import * as vscode from 'vscode';
 import { PlanService } from './services/planService';
 import { CommentService } from './services/commentService';
+import { OpenSpecService } from './services/openspecService';
 import { PlanTreeDataProvider, FilterDays } from './providers/planTreeProvider';
 import { WebviewPanelManager } from './providers/webviewPanelManager';
 import { FileWatcher } from './services/fileWatcher';
+import type { SidebarMode } from './types';
 
 let planService: PlanService;
 let commentService: CommentService;
+let openspecService: OpenSpecService;
 let treeProvider: PlanTreeDataProvider;
 let webviewManager: WebviewPanelManager;
 let fileWatcher: FileWatcher;
+let openspecWatcher: FileWatcher | undefined;
 
-/** 更新 TreeView 描述显示当前过滤状态 */
+/** 更新 TreeView 描述显示当前模式/过滤状态 */
 function updateTreeViewDescription(treeView: vscode.TreeView<vscode.TreeItem>) {
   treeView.description = treeProvider.getFilterLabel();
+}
+
+/** 更新 TreeView 标题 */
+function updateTreeViewTitle(treeView: vscode.TreeView<vscode.TreeItem>) {
+  treeView.title = treeProvider.getModeLabel();
+  updateTreeViewDescription(treeView);
 }
 
 export function activate(context: vscode.ExtensionContext) {
@@ -24,8 +34,9 @@ export function activate(context: vscode.ExtensionContext) {
   // 初始化服务
   planService = new PlanService(context);
   commentService = new CommentService(context, planService);
-  treeProvider = new PlanTreeDataProvider(planService, context);
-  webviewManager = new WebviewPanelManager(context, planService, commentService);
+  openspecService = new OpenSpecService();
+  treeProvider = new PlanTreeDataProvider(planService, openspecService, context);
+  webviewManager = new WebviewPanelManager(context, planService, commentService, openspecService);
 
   // 注册 TreeView
   const treeView = vscode.window.createTreeView('planViewer.planList', {
@@ -34,21 +45,67 @@ export function activate(context: vscode.ExtensionContext) {
   });
   context.subscriptions.push(treeView);
 
-  // 初始显示过滤状态
-  updateTreeViewDescription(treeView);
+  // 初始显示标题和过滤状态
+  updateTreeViewTitle(treeView);
+
+  // 设置初始 context 变量
+  vscode.commands.executeCommand('setContext', 'planViewer.mode', 'plans');
 
   // 文件监听器：自动刷新列表和 Webview
-  fileWatcher = new FileWatcher(planService.getPlansDir(), () => {
+  fileWatcher = new FileWatcher([planService.getPlansDir()], () => {
     treeProvider.refresh();
     webviewManager.refreshCurrentPlan();
   });
   context.subscriptions.push(...fileWatcher.start());
+
+  // OpenSpec 文件监听器
+  const openspecDir = openspecService.getOpenSpecDir();
+  if (openspecDir) {
+    openspecWatcher = new FileWatcher([openspecDir], () => {
+      if (treeProvider.getMode() === 'openspec') {
+        treeProvider.refresh();
+      }
+    });
+    context.subscriptions.push(...openspecWatcher.start());
+  }
 
   // 注册命令
   context.subscriptions.push(
     // 打开 Plan（点击 TreeView 项或命令面板）
     vscode.commands.registerCommand('planViewer.openPlan', async (planId: string) => {
       await webviewManager.openPlan(planId);
+    }),
+
+    // 打开 OpenSpec Artifact
+    vscode.commands.registerCommand('planViewer.openArtifact', async (artifactPath: string) => {
+      await webviewManager.openArtifact(artifactPath);
+    }),
+
+    // 模式切换
+    vscode.commands.registerCommand('planViewer.switchMode', async () => {
+      const current = treeProvider.getMode();
+      const items: { label: string; value: SidebarMode; description?: string }[] = [
+        {
+          label: '$(markdown) Claude Plans',
+          value: 'plans',
+          description: current === 'plans' ? '✓ current' : undefined,
+        },
+        {
+          label: '$(package) OpenSpec',
+          value: 'openspec',
+          description: current === 'openspec' ? '✓ current' : undefined,
+        },
+      ];
+
+      const picked = await vscode.window.showQuickPick(items, {
+        placeHolder: 'Switch sidebar mode',
+      });
+
+      if (picked && picked.value !== current) {
+        treeProvider.setMode(picked.value);
+        vscode.commands.executeCommand('setContext', 'planViewer.mode', picked.value);
+        updateTreeViewTitle(treeView);
+      }
     }),
 
     // 刷新列表
@@ -107,5 +164,6 @@ export function activate(context: vscode.ExtensionContext) {
 export function deactivate() {
   webviewManager?.dispose();
   fileWatcher?.dispose();
+  openspecWatcher?.dispose();
   console.log('[Plan Viewer] 扩展已停用');
 }
