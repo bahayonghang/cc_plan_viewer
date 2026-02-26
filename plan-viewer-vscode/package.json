@@ -2,7 +2,7 @@
   "name": "plan-viewer",
   "displayName": "Plan Viewer",
   "description": "View and review Claude Code plan files with inline commenting and Mermaid diagram support",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "publisher": "anthropic-community",
   "license": "MIT",
   "repository": {
