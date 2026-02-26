@@ -136,6 +136,20 @@ body {
   flex: 1;
   overflow-y: auto;
   padding: 24px 32px;
+  position: relative;
+  /* 悬浮表单的定位锚点 */
+}
+
+/* 悬浮评论表单容器 */
+.floating-comment-form {
+  position: absolute;
+  z-index: 100;
+  animation: comment-form-enter 0.2s ease-out;
+}
+
+/* 悬浮评论遮罩层（点击关闭，现已弃用，保留结构为向后兼容） */
+.floating-comment-backdrop {
+  display: none;
 }
 
 /* Section 包裹 */
@@ -186,23 +200,42 @@ body {
   background: var(--accent-orange);
 }
 
-/* 内联评论卡片 */
+/* 内联评论卡片 — 悬浮式设计 */
 .inline-comment-card {
   display: flex;
   gap: 8px;
-  padding: 8px 12px;
-  margin: 8px 0;
+  padding: 10px 14px;
+  margin: 10px 0;
   background: var(--bg-secondary);
   border: 1px solid var(--border-primary);
   border-left: 3px solid var(--accent-blue);
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 0.85rem;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  animation: comment-card-enter 0.25s ease-out;
 }
 
-.inline-comment-card.suggestion { border-left-color: var(--accent-purple); }
-.inline-comment-card.question { border-left-color: var(--accent-orange); }
-.inline-comment-card.approve { border-left-color: var(--accent-green); }
-.inline-comment-card.reject { border-left-color: var(--accent-red); }
+.inline-comment-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+}
+
+.inline-comment-card.suggestion {
+  border-left-color: var(--accent-purple);
+}
+
+.inline-comment-card.question {
+  border-left-color: var(--accent-orange);
+}
+
+.inline-comment-card.approve {
+  border-left-color: var(--accent-green);
+}
+
+.inline-comment-card.reject {
+  border-left-color: var(--accent-red);
+}
 
 .inline-comment-text {
   flex: 1;
@@ -227,6 +260,7 @@ body {
   cursor: pointer;
   padding: 2px;
   border-radius: 3px;
+  transition: color 0.15s, background 0.15s;
 }
 
 .inline-comment-actions button:hover {
@@ -234,13 +268,18 @@ body {
   background: var(--bg-hover);
 }
 
-/* 内联评论表单 */
+/* 内联评论表单 — 悬浮式设计 */
 .inline-comment-form {
-  margin: 12px 0;
-  padding: 12px;
+  position: relative;
+  margin: 16px 0;
+  padding: 16px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-primary);
-  border-radius: 8px;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25), 0 2px 8px rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(12px);
+  animation: comment-form-enter 0.2s ease-out;
+  z-index: 10;
 }
 
 .inline-comment-form textarea {
@@ -448,22 +487,40 @@ body {
   background: rgba(245, 158, 11, 0.4);
 }
 
-/* 选区浮动提示 */
+/* 选区浮动提示 — 增强悬浮效果 */
 .selection-tooltip {
   position: fixed;
   display: none;
-  padding: 4px 10px;
+  padding: 6px 14px;
   background: var(--accent-blue);
   color: #fff;
-  border-radius: 4px;
-  font-size: 0.8rem;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 500;
   cursor: pointer;
   z-index: 1000;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.selection-tooltip::after {
+  content: '';
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 5px 5px 0;
+  border-style: solid;
+  border-color: var(--accent-blue) transparent transparent transparent;
+}
+
+.selection-tooltip:hover {
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
 }
 
 .selection-tooltip.visible {
   display: block;
+  animation: tooltip-enter 0.15s ease-out;
 }
 
 /* Toast 通知 */
@@ -490,20 +547,56 @@ body {
 }
 
 /* Markdown 内容样式 */
-.markdown-pane h1 { font-size: 1.8rem; font-weight: 700; margin: 24px 0 12px; }
-.markdown-pane h2 { font-size: 1.4rem; font-weight: 600; margin: 20px 0 10px; }
-.markdown-pane h3 { font-size: 1.15rem; font-weight: 600; margin: 16px 0 8px; }
-.markdown-pane h4 { font-size: 1rem; font-weight: 600; margin: 12px 0 6px; }
+.markdown-pane h1 {
+  font-size: 1.8rem;
+  font-weight: 700;
+  margin: 24px 0 12px;
+}
 
-.markdown-pane p { margin: 8px 0; }
-.markdown-pane ul, .markdown-pane ol { margin: 8px 0; padding-left: 24px; }
-.markdown-pane li { margin: 4px 0; }
+.markdown-pane h2 {
+  font-size: 1.4rem;
+  font-weight: 600;
+  margin: 24px 0 12px;
+  border-bottom: 1px solid var(--border-primary);
+  padding-bottom: 8px;
+}
+
+.markdown-pane h3 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin: 20px 0 10px;
+  color: var(--vscode-editor-foreground);
+}
+
+.markdown-pane h4 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 12px 0 6px;
+  color: var(--text-secondary);
+}
+
+.markdown-pane p {
+  margin: 8px 0;
+}
+
+.markdown-pane ul,
+.markdown-pane ol {
+  margin: 8px 0;
+  padding-left: 24px;
+}
+
+.markdown-pane li {
+  margin: 4px 0;
+}
 
 .markdown-pane a {
   color: var(--accent-blue);
   text-decoration: none;
 }
-.markdown-pane a:hover { text-decoration: underline; }
+
+.markdown-pane a:hover {
+  text-decoration: underline;
+}
 
 .markdown-pane blockquote {
   margin: 12px 0;
@@ -515,24 +608,49 @@ body {
 }
 
 .markdown-pane pre {
-  margin: 12px 0;
+  margin: 16px 0;
   padding: 16px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-primary);
-  border-radius: 6px;
+  border-radius: 8px;
   overflow-x: auto;
+  /* Zebra striping effect aligned with line-height */
+  background-image: repeating-linear-gradient(transparent,
+      transparent 1.6rem,
+      rgba(128, 128, 128, 0.04) 1.6rem,
+      rgba(128, 128, 128, 0.04) 3.2rem);
+  background-attachment: local;
+  line-height: 1.6rem;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05), 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .markdown-pane code {
   font-family: var(--font-mono);
   font-size: 0.9em;
+  line-height: 1.6rem;
+  /* Ensure aligns with zebra stripes */
 }
 
-.markdown-pane :not(pre) > code {
-  padding: 2px 5px;
-  background: var(--bg-tertiary);
-  border-radius: 3px;
+.markdown-pane :not(pre)>code {
+  padding: 3px 6px;
+  background: rgba(128, 128, 128, 0.15);
+  border-radius: 4px;
   font-size: 0.85em;
+  color: var(--accent-blue);
+  box-shadow: 0 0 0 1px rgba(128, 128, 128, 0.1);
+}
+
+/* Enhanced Diff Styling */
+.markdown-pane pre code.language-diff .hljs-addition {
+  background-color: rgba(46, 160, 67, 0.15);
+  display: inline-block;
+  width: 100%;
+}
+
+.markdown-pane pre code.language-diff .hljs-deletion {
+  background-color: rgba(248, 81, 73, 0.15);
+  display: inline-block;
+  width: 100%;
 }
 
 .markdown-pane table {
@@ -541,7 +659,8 @@ body {
   width: 100%;
 }
 
-.markdown-pane th, .markdown-pane td {
+.markdown-pane th,
+.markdown-pane td {
   border: 1px solid var(--border-primary);
   padding: 8px 12px;
   text-align: left;
@@ -583,8 +702,50 @@ body {
 }
 
 @keyframes skeleton-shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* 评论入场动画 */
+@keyframes comment-form-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes comment-card-enter {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes tooltip-enter {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -100%) scale(0.92);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(-50%, -100%) scale(1);
+  }
 }
 
 .skeleton-content-heading {
@@ -653,12 +814,19 @@ body {
 }
 
 /* 滚动条 */
-::-webkit-scrollbar { width: 8px; }
-::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 ::-webkit-scrollbar-thumb {
   background: var(--border-primary);
   border-radius: 4px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
 }

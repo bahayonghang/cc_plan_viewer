@@ -64,11 +64,14 @@ export function SelectionTooltip({ onComment }: SelectionTooltipProps) {
     };
   }, []);
 
-  function handleClick() {
+  function handleClick(e: MouseEvent) {
+    // 阻止冒泡，避免触发 document 的 click/mouseup 取消选区
+    e.stopPropagation();
+    e.preventDefault();
     if (selectedTextRef.current) {
       onComment(selectedTextRef.current);
       setVisible(false);
-      window.getSelection()?.removeAllRanges();
+      // 注意：不要在这里 removeAllRanges()，因为 MarkdownViewer 需要据此计算弹窗坐标！
     }
   }
 
