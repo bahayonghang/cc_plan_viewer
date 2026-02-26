@@ -8,7 +8,7 @@ import type { PlanInfo } from '../types';
  */
 export class PlanTreeItem extends vscode.TreeItem {
   constructor(public readonly plan: PlanInfo) {
-    super(plan.name, vscode.TreeItemCollapsibleState.None);
+    super(PlanTreeItem.cleanPlanName(plan.name), vscode.TreeItemCollapsibleState.None);
 
     this.id = plan.id;
     this.tooltip = this.buildTooltip();
@@ -24,8 +24,41 @@ export class PlanTreeItem extends vscode.TreeItem {
     // 上下文菜单标识
     this.contextValue = 'planItem';
 
-    // 使用 Markdown 文件图标
-    this.iconPath = new vscode.ThemeIcon('file-text');
+    // 动态分配彩色图标
+    this.iconPath = this.getIconForPlan(plan.name);
+  }
+
+  private static cleanPlanName(name: string): string {
+    return name
+      .replace(/^(Plan|Fix|Feature|修复|重构):\s*/i, '')
+      .replace(/\s*-\s*Implementation Plan$/i, '')
+      .replace(/\s*Implementation Plan$/i, '')
+      .trim() || name;
+  }
+
+  private getIconForPlan(name: string): vscode.ThemeIcon {
+    const lowerName = name.toLowerCase();
+
+    if (lowerName.includes('fix') || lowerName.includes('bug') || lowerName.includes('修复')) {
+      return new vscode.ThemeIcon('wrench', new vscode.ThemeColor('problemsWarningIcon.foreground'));
+    }
+    if (lowerName.includes('refactor') || lowerName.includes('重构')) {
+      return new vscode.ThemeIcon('zap', new vscode.ThemeColor('symbolIcon.methodForeground'));
+    }
+    if (lowerName.includes('ui') || lowerName.includes('界面') || lowerName.includes('页')) {
+      return new vscode.ThemeIcon('window', new vscode.ThemeColor('symbolIcon.classForeground'));
+    }
+    if (lowerName.includes('doc') || lowerName.includes('readme') || lowerName.includes('文档')) {
+      return new vscode.ThemeIcon('book', new vscode.ThemeColor('textLink.foreground'));
+    }
+    if (lowerName.includes('feature') || lowerName.includes('feat') || lowerName.includes('支持') || lowerName.includes('集成')) {
+      return new vscode.ThemeIcon('lightbulb', new vscode.ThemeColor('charts.green'));
+    }
+    if (lowerName.includes('test') || lowerName.includes('测试')) {
+      return new vscode.ThemeIcon('beaker', new vscode.ThemeColor('charts.blue'));
+    }
+
+    return new vscode.ThemeIcon('markdown', new vscode.ThemeColor('symbolIcon.stringForeground'));
   }
 
   private buildDescription(): string {
