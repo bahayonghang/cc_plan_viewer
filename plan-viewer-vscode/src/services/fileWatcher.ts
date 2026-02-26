@@ -3,36 +3,43 @@
 import * as vscode from 'vscode';
 
 /**
- * Plan 文件监听器
+ * 文件监听器（支持多目录）
  *
- * 监听 plans 目录下 .md 文件的变化，
- * 自动刷新列表和当前打开的 plan。
+ * 监听指定目录下 .md 文件的变化，
+ * 自动触发回调。
  *
  * 使用 300ms 去抖避免频繁刷新。
  */
 export class FileWatcher {
-  private watcher: vscode.FileSystemWatcher | undefined;
+  private watchers: vscode.FileSystemWatcher[] = [];
   private debounceTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly debounceMs = 300;
 
   constructor(
-    private readonly plansDir: string,
+    private readonly directories: string[],
     private readonly onFileChanged: () => void,
-  ) {}
+  ) { }
 
   /** 启动监听 */
   start(): vscode.Disposable[] {
-    const pattern = new vscode.RelativePattern(this.plansDir, '**/*.md');
-
-    this.watcher = vscode.workspace.createFileSystemWatcher(pattern);
-
     const handler = () => this.debounce();
 
-    this.watcher.onDidChange(handler);
-    this.watcher.onDidCreate(handler);
-    this.watcher.onDidDelete(handler);
+    for (const dir of this.directories) {
+      try {
+        const pattern = new vscode.RelativePattern(dir, '**/*.md');
+        const watcher = vscode.workspace.createFileSystemWatcher(pattern);
 
-    return [this.watcher];
+        watcher.onDidChange(handler);
+        watcher.onDidCreate(handler);
+        watcher.onDidDelete(handler);
+
+        this.watchers.push(watcher);
+      } catch {
+        // 目录不存在时跳过
+      }
+    }
+
+    return [...this.watchers];
   }
 
   /** 停止监听 */
@@ -40,7 +47,10 @@ export class FileWatcher {
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
     }
-    this.watcher?.dispose();
+    for (const w of this.watchers) {
+      w.dispose();
+    }
+    this.watchers = [];
   }
 
   private debounce(): void {
