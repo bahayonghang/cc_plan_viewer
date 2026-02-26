@@ -36,3 +36,6 @@ build/
 .antigravityignore
 
 outputs/
+.agent/
+.codex/
+openspec/
