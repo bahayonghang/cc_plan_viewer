@@ -5,7 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { Comment, CommentData } from '../types';
 import { PlanService } from './planService';
-import { injectCommentIntoContent, removeCommentFromContent } from './commentInjector';
+import { injectCommentIntoContent, removeCommentFromContent, removeAllCommentsFromContent } from './commentInjector';
 import { generateCommentId } from './utils';
 
 /**
@@ -107,6 +107,21 @@ export class CommentService {
     return updated;
   }
 
+  /** 清除指定 Plan 的所有评论 */
+  async clearAllComments(planId: string): Promise<void> {
+    // 清除 globalState 中的所有评论
+    this.planService.saveComments(planId, []);
+
+    // 可选: 从 Markdown 文件中移除所有评论块
+    const embedEnabled = vscode.workspace
+      .getConfiguration('planViewer')
+      .get<boolean>('embedCommentsInMarkdown', true);
+
+    if (embedEnabled) {
+      await this.removeAllCommentsFromFile(planId);
+    }
+  }
+
   // ── 文件操作 ────────────────────────────────────────
 
   private async injectCommentIntoFile(planId: string, comment: Comment): Promise<void> {
@@ -132,6 +147,20 @@ export class CommentService {
       }
     } catch (e) {
       console.error('[Plan Viewer] 评论移除失败:', e);
+    }
+  }
+
+  private async removeAllCommentsFromFile(planId: string): Promise<void> {
+    const filePath = path.join(this.planService.getPlansDir(), `${planId}.md`);
+
+    try {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      const newContent = removeAllCommentsFromContent(content);
+      if (newContent !== content) {
+        fs.writeFileSync(filePath, newContent, 'utf-8');
+      }
+    } catch (e) {
+      console.error('[Plan Viewer] 评论清除失败:', e);
     }
   }
 }

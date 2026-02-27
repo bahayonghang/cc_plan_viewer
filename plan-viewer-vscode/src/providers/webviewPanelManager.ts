@@ -33,6 +33,11 @@ export class WebviewPanelManager {
     return this.panel?.visible ?? false;
   }
 
+  /** 获取当前正在查看的 planId */
+  getCurrentPlanId(): string | undefined {
+    return this.currentPlanId;
+  }
+
   /** 打开或聚焦 Plan Webview */
   async openPlan(planId: string): Promise<void> {
     const plan = await this.planService.getPlan(planId);
@@ -241,6 +246,20 @@ export class WebviewPanelManager {
           type: 'planList',
           plans,
         });
+        break;
+      }
+
+      case 'clearComments': {
+        const confirmBtn = 'Clear All';
+        const answer = await vscode.window.showWarningMessage(
+          'Are you sure you want to clear all comments for this plan?',
+          { modal: true },
+          confirmBtn,
+        );
+        if (answer === confirmBtn) {
+          await this.commentService.clearAllComments(msg.planId);
+          this.panel?.webview.postMessage({ type: 'commentsCleared' });
+        }
         break;
       }
     }

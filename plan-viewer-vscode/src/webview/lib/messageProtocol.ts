@@ -45,6 +45,10 @@ export interface ConfigChangedMessage {
   config: WebviewConfig;
 }
 
+export interface CommentsClearedMessage {
+  type: 'commentsCleared';
+}
+
 export type ExtensionToWebviewMessage =
   | LoadPlanMessage
   | LoadArtifactMessage
@@ -52,7 +56,8 @@ export type ExtensionToWebviewMessage =
   | CommentAddedMessage
   | CommentDeletedMessage
   | CommentUpdatedMessage
-  | ConfigChangedMessage;
+  | ConfigChangedMessage
+  | CommentsClearedMessage;
 
 // ── Webview → Extension ──────────────────────────────────
 
@@ -100,6 +105,11 @@ export interface ShowToastMessage {
   message: string;
 }
 
+export interface ClearCommentsMessage {
+  type: 'clearComments';
+  planId: string;
+}
+
 export type WebviewToExtensionMessage =
   | AddCommentMessage
   | DeleteCommentMessage
@@ -108,7 +118,8 @@ export type WebviewToExtensionMessage =
   | RequestPlanListMessage
   | OpenInEditorMessage
   | OpenArtifactMessage
-  | ShowToastMessage;
+  | ShowToastMessage
+  | ClearCommentsMessage;
 
 // ── 配置 ────────────────────────────────────────────────
 

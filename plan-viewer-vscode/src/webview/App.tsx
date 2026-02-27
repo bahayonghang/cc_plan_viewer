@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'preact/hooks';
 import type { Plan } from '../types';
 import type { ExtensionToWebviewMessage } from './lib/messageProtocol';
+import { postMessage } from './hooks/useVsCodeApi';
 import { EmptyState } from './components/EmptyState';
 import { Toolbar } from './components/Toolbar';
 import { MarkdownViewer } from './components/MarkdownViewer';
@@ -112,6 +113,18 @@ export function App() {
           document.documentElement.style.setProperty('--user-font-size', `${msg.config.fontSize}px`);
           document.documentElement.style.setProperty('--user-line-height', `${msg.config.lineHeight}`);
           break;
+
+        case 'commentsCleared':
+          setState(prev => {
+            if (!prev.plan) return prev;
+            return {
+              ...prev,
+              plan: { ...prev.plan, comments: [] },
+              commentFormTarget: null,
+              selectedTextTarget: null,
+            };
+          });
+          break;
       }
     }
 
@@ -147,6 +160,11 @@ export function App() {
       selectedTextTarget: selectedText,
     }));
   }, []);
+
+  const handleClearComments = useCallback(() => {
+    if (!state.plan) return;
+    postMessage({ type: 'clearComments', planId: state.plan.id });
+  }, [state.plan]);
 
   // 空状态
   if (!state.plan && !state.artifact) {
@@ -203,6 +221,7 @@ export function App() {
         planName={plan.name}
         commentCount={plan.comments.length}
         onTogglePanel={handleTogglePanel}
+        onClearComments={handleClearComments}
         panelOpen={panelOpen}
       />
 

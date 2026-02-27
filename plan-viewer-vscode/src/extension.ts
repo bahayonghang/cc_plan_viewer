@@ -52,16 +52,44 @@ export function activate(context: vscode.ExtensionContext) {
   vscode.commands.executeCommand('setContext', 'planViewer.mode', 'plans');
 
   // 文件监听器：自动刷新列表和 Webview
-  fileWatcher = new FileWatcher([planService.getPlansDir()], () => {
+  fileWatcher = new FileWatcher([planService.getPlansDir()], async (uri, changeType) => {
     treeProvider.refresh();
     webviewManager.refreshCurrentPlan();
+
+    // 当文件被修改时，检查是否需要提示清除评论
+    if (changeType === 'change') {
+      const currentPlanId = webviewManager.getCurrentPlanId();
+      if (!currentPlanId) return;
+
+      // 检查变更的文件是否是当前正在查看的 plan
+      const planFileName = `${currentPlanId}.md`;
+      if (!uri.fsPath.replace(/\\/g, '/').endsWith(planFileName)) return;
+
+      // 检查该 plan 是否有评论
+      const comments = planService.loadComments(currentPlanId);
+      if (comments.length === 0) return;
+
+      // 弹出提示
+      const clearBtn = 'Clear Comments';
+      const keepBtn = 'Keep';
+      const choice = await vscode.window.showInformationMessage(
+        'Plan file has been updated. Clear old comments?',
+        clearBtn,
+        keepBtn,
+      );
+
+      if (choice === clearBtn) {
+        await commentService.clearAllComments(currentPlanId);
+        await webviewManager.refreshCurrentPlan();
+      }
+    }
   });
   context.subscriptions.push(...fileWatcher.start());
 
   // OpenSpec 文件监听器
   const openspecDir = openspecService.getOpenSpecDir();
   if (openspecDir) {
-    openspecWatcher = new FileWatcher([openspecDir], () => {
+    openspecWatcher = new FileWatcher([openspecDir], (_uri, _changeType) => {
       if (treeProvider.getMode() === 'openspec') {
         treeProvider.refresh();
       }
